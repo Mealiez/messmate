@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register - Mess Management System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-blue-100 min-h-screen flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-8 my-8">
+    <div class="text-center mb-8">
+      <div class="flex justify-center mb-4">
+        <svg class="h-16 w-16 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+        </svg>
+      </div>
+      <h1 class="text-3xl font-bold text-gray-800 mb-2">Registration</h1>
+      <p class="text-gray-600">Create your mess account</p>
+    </div>
+
+    <div id="successAlert" class="hidden bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+      <span id="successMessage"></span>
+    </div>
+
+    <div id="errorAlert" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+      <span id="errorMessage"></span>
+    </div>
+
+    <form id="registerForm" class="space-y-4">
+  <div>
+    <label class="block text-gray-700 font-semibold mb-2">Register As</label>
+    <select id="role" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
+      <option value="student">Student</option>
+      <option value="parent">Parent</option>
+      <option value="admin">Admin (Owner)</option>
+    </select>
+  </div>
+  
+  <div id="licenseKeyField" class="hidden">
+    <label class="block text-gray-700 font-semibold mb-2">License Key</label>
+    <input type="password" id="licenseKey" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition" placeholder="Enter your admin license key">
+  </div>
+
+  <div class="grid md:grid-cols-2 gap-4">
+    <div>
+      <label class="block text-gray-700 font-semibold mb-2">Full Name</label>
+      <input type="text" id="name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" placeholder="John Doe">
+    </div>
+    <div>
+      <label class="block text-gray-700 font-semibold mb-2">Email</label>
+      <input type="email" id="email" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" placeholder="john@example.com">
+    </div>
+  </div>
+
+ <div id="studentFields" class="space-y-4">
+  <div class="grid md:grid-cols-2 gap-4">
+    <div>
+      <label class="block text-gray-700 font-semibold mb-2">Mobile Number</label>
+      <input type="tel" id="mobile" pattern="[0-9]{10}" class="w-full px-4 py-3 border border-gray-300 rounded-lg" placeholder="9876543210">
+    </div>
+    <div>
+      <label class="block text-gray-700 font-semibold mb-2">RFID Tag</label>
+      <input type="text" id="rfidTag" class="w-full px-4 py-3 border border-gray-300 rounded-lg" placeholder="RFID-12345">
+    </div>
+  </div>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div>
+      <label class="block text-gray-700 font-semibold mb-2">Room Number</label>
+      <input type="text" id="roomNo" class="w-full px-4 py-3 border border-gray-300 rounded-lg" placeholder="A-101">
+    </div>
+    <div>
+      <label class="block text-gray-700 font-semibold mb-2">Mess ID</label>
+      <input type="text" id="messId" class="w-full px-4 py-3 border border-gray-300 rounded-lg" placeholder="Enter ID from your mess owner">
+    </div>
+  </div>
+  <div id="planTypeDiv" class="hidden">
+    <label class="block text-gray-700 font-semibold mb-2">Plan Type</label>
+    <select id="planType" required class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+      <option value="" disabled selected>Enter Mess ID first</option>
+    </select>
+  </div>
+</div>
+
+  <div>
+    <label class="block text-gray-700 font-semibold mb-2">Password</label>
+    <input type="password" id="password" required minlength="6" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" placeholder="Minimum 6 characters">
+  </div>
+  <div>
+    <label class="block text-gray-700 font-semibold mb-2">Confirm Password</label>
+    <input type="password" id="confirmPassword" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" placeholder="Re-enter password">
+  </div>
+
+  <button type="submit" id="registerBtn" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">
+    Register
+  </button>
+</form>
+
+    <div class="mt-6 text-center">
+      <p class="text-gray-600">
+        Already have an account?
+        <a href="login.html" class="text-blue-600 font-semibold hover:underline">Login here</a>
+      </p>
+      <a href="index.html" class="inline-block mt-4 text-gray-500 hover:text-gray-700">
+        Back to Home
+      </a>
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase } from './supabaseConfig.js';
+
+    const registerForm = document.getElementById('registerForm');
+    const registerBtn = document.getElementById('registerBtn');
+    const errorAlert = document.getElementById('errorAlert');
+    const errorMessage = document.getElementById('errorMessage');
+    const successAlert = document.getElementById('successAlert');
+    const successMessage = document.getElementById('successMessage');
+    const roleSelect = document.getElementById('role');
+    const studentFields = document.getElementById('studentFields');
+    const messIdInput = document.getElementById('messId');
+    const planTypeDiv = document.getElementById('planTypeDiv');
+    const planTypeSelect = document.getElementById('planType');
+    const licenseKeyField = document.getElementById('licenseKeyField');
+    const licenseKeyInput = document.getElementById('licenseKey');
+
+roleSelect.addEventListener('change', () => {
+    const role = roleSelect.value;
+    const mobileInput = document.getElementById('mobile');
+    const rfidInput = document.getElementById('rfidTag');
+    const roomInput = document.getElementById('roomNo');
+
+    // Reset all conditional fields
+    studentFields.style.display = 'none';
+    licenseKeyField.classList.add('hidden');
+    planTypeDiv.classList.add('hidden'); // Hide plan div
+    planTypeSelect.innerHTML = '<option value="" disabled selected>Enter Mess ID first</option>'; // Reset plans
+
+    // Reset requirements
+    licenseKeyInput.required = false;
+    mobileInput.required = false;
+    rfidInput.required = false;
+    roomInput.required = false;
+    messIdInput.required = false;
+    planTypeSelect.required = false; // Plan is only required if student
+
+    if (role === 'student') {
+        studentFields.style.display = 'block';
+        mobileInput.required = true;
+        rfidInput.required = true;
+        roomInput.required = true;
+        messIdInput.required = true;
+        // Plan type div remains hidden until Mess ID is valid
+        planTypeSelect.required = true; // Make plan required for students
+    } else if (role === 'admin') {
+        licenseKeyField.classList.remove('hidden');
+        licenseKeyInput.required = true;
+    }
+});
+// Debounce function to limit API calls while typing
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+const fetchPlans = debounce(async () => {
+    const role = roleSelect.value;
+    if (role !== 'student') return;
+
+    const messId = messIdInput.value.trim();
+    planTypeDiv.classList.add('hidden');
+    planTypeSelect.innerHTML = '<option value="" disabled selected>Loading plans...</option>';
+
+    if (!messId) {
+        planTypeSelect.innerHTML = '<option value="" disabled selected>Enter Mess ID first</option>';
+        return;
+    }
+
+    const { data: plans, error } = await supabase
+        .from('plans')
+        .select('name, price')
+        .eq('mess_id', messId);
+
+    if (error) {
+        planTypeSelect.innerHTML = '<option value="" disabled selected>Invalid Mess ID</option>';
+    } else if (plans && plans.length > 0) {
+        planTypeSelect.innerHTML = '<option value="" disabled selected>Select a plan</option>';
+        plans.forEach(plan => {
+            const option = document.createElement('option');
+            option.value = plan.name;
+            option.textContent = `${plan.name} (₹${plan.price})`;
+            planTypeSelect.appendChild(option);
+        });
+        planTypeDiv.classList.remove('hidden');
+    } else {
+        planTypeSelect.innerHTML = '<option value="" disabled selected>No plans found for this mess</option>';
+    }
+}, 500);
+
+// Attach the listener to the Mess ID input field
+messIdInput.addEventListener('input', fetchPlans);
+
+// Trigger change event on page load to set initial form state
+roleSelect.dispatchEvent(new Event('change'));
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorAlert.classList.remove('hidden');
+      successAlert.classList.add('hidden');
+      setTimeout(() => {
+        errorAlert.classList.add('hidden');
+      }, 5000);
+    }
+
+    function showSuccess(message) {
+      successMessage.textContent = message;
+      successAlert.classList.remove('hidden');
+      errorAlert.classList.add('hidden');
+    }
+
+    registerForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const role = roleSelect.value;
+    const name = document.getElementById('name').value;
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+
+    if (role === 'admin') {
+        const licenseKey = licenseKeyInput.value;
+        if (licenseKey !== '9270398199') {
+            showError('Incorrect license key. Contact the administrator.');
+            return;
+        }
+    }
+    
+    if (password !== confirmPassword) {
+        showError('Passwords do not match');
+        return;
+    }
+
+    registerBtn.disabled = true;
+    registerBtn.textContent = 'Registering...';
+
+    try {
+        const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
+        if (authError) throw new Error(authError.message);
+
+        const { error: profileError } = await supabase.from('user_profiles').insert({ id: authData.user.id, role: role, full_name: name });
+        if (profileError) throw new Error('Failed to create user profile: ' + profileError.message);
+
+        if (role === 'student') {
+            const mobile = document.getElementById('mobile').value;
+            const rfidTag = document.getElementById('rfidTag').value;
+            const roomNo = document.getElementById('roomNo').value;
+            const planName = planTypeSelect.value; // Get selected plan NAME
+            const messId = messIdInput.value;
+
+             if (!planName) {
+                showError('Please select a plan type.');
+                registerBtn.disabled = false;
+                registerBtn.textContent = 'Register';
+                return;
+            }
+
+            const { error: studentError } = await supabase.from('students').insert({
+                user_id: authData.user.id, name, email, mobile,
+                rfid_tag: rfidTag,
+                plan_type: planName, // Save the selected plan name
+                room_no: roomNo, status: 'Active', mess_id: messId
+            });
+            if (studentError) throw new Error('Failed to create student record: ' + studentError.message);
+        }
+
+        // Handle success redirection
+        if (role === 'student') {
+            showSuccess('Registration successful! Redirecting...');
+            setTimeout(() => { window.location.href = 'student-dashboard.html'; }, 2000);
+        } else if (role === 'admin') {
+            showSuccess('Admin registration successful! Redirecting...');
+            setTimeout(() => { window.location.href = 'admin-dashboard.html'; }, 2000);
+        } else if (role === 'parent') {
+            showSuccess('Parent registration successful! Redirecting...');
+            setTimeout(() => { window.location.href = 'parent-dashboard.html'; }, 2000);
+        }
+
+    } catch (error) {
+        showError(error.message);
+        registerBtn.disabled = false;
+        registerBtn.textContent = 'Register';
+    }
+});
+  </script>
+</body>
+</html>
