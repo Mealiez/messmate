@@ -134,6 +134,38 @@ function stopScanner() {
     }
 }
 
+function setupSidebarToggle() {
+  const sidebar = document.getElementById('sidebar');
+  const sidebarToggle = document.getElementById('sidebarToggle');
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+  const navLinks = document.querySelectorAll('.nav-link');
+
+  if (sidebarToggle) {
+    sidebarToggle.addEventListener('click', () => {
+      sidebar.classList.toggle('-translate-x-full');
+      sidebarOverlay.classList.toggle('hidden');
+    });
+  }
+
+  if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', () => {
+      sidebar.classList.add('-translate-x-full');
+      sidebarOverlay.classList.add('hidden');
+    });
+  }
+  
+  // Hide sidebar when a nav link is clicked on mobile
+  navLinks.forEach(link => {
+    link.addEventListener('click', () => {
+        // Tailwind's 'md' breakpoint is 768px
+        if (window.innerWidth < 768) { 
+            sidebar.classList.add('-translate-x-full');
+            sidebarOverlay.classList.add('hidden');
+        }
+    });
+  });
+}
+
 function setupNavigation() {
   const navLinks = document.querySelectorAll('.nav-link');
   const sections = document.querySelectorAll('.content-section');
@@ -183,6 +215,8 @@ function setupNavigation() {
     });
   });
 }
+
+
 
 async function displayMessId() {
   const adminId = await getAdminId();
@@ -1115,6 +1149,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
+  setupSidebarToggle();
   setupNavigation();
   loadDashboard();
   document.getElementById('markAbsenteesBtn').addEventListener('click', markAbsenteesForPreviousMeal);
