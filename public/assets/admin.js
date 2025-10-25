@@ -38,6 +38,14 @@ function getMealTypeByTime() {
     if (hour >= 19 && hour < 22) return 'DINNER';
     return null;
 }
+// Helper to get the PREVIOUS meal based on current time
+function getPreviousMealType() {
+    const hour = new Date().getHours();
+    if (hour >= 11 && hour < 16) return 'BREAKFAST'; // If it's lunch time or later, mark breakfast
+    if (hour >= 16 && hour < 22) return 'LUNCH';   // If it's dinner time or later, mark lunch
+    if (hour >= 22 || hour < 7) return 'DINNER';  // If it's after dinner or early morning, mark dinner
+    return null; // No meal has passed yet today to mark
+}
 
 async function onScanSuccess(decodedText, decodedResult) {
     const studentId = decodedText;
@@ -670,47 +678,47 @@ async function saveMessInfo(event) {
 // Attach listener to the form
 document.getElementById('messInfoForm').addEventListener('submit', saveMessInfo);
 
-async function loadAttendanceStats() {
-  if (!currentStudent) return;
+async function loadAttendance() {
+    const adminId = await getAdminId();
+    if (!adminId) return;
 
   const { data: attendance } = await supabase
     .from('attendance')
-    .select('*')
-    .eq('student_id', currentStudent.id)
-    .order('marked_at', { ascending: false }); // Order by time marked
+    .select(`
+      *,
+      students (name)
+    `)
+    .eq('mess_id', adminId)
+    .order('marked_at', { ascending: false }) // Order by time marked is better
+    .limit(100);
 
-  const totalRecords = attendance?.length || 0;
-  // Corrected: Make calculation case-insensitive
-  const presentRecords = attendance?.filter(a => a.status.toUpperCase() === 'PRESENT').length || 0;
-  const attendanceRate = totalRecords > 0 ? ((presentRecords / totalRecords) * 100).toFixed(1) : 0;
-
-  document.getElementById('attendancePercentage').textContent = `${attendanceRate}%`;
-  document.getElementById('daysPresent').textContent = presentRecords; // Display count of present records
-
-  const recentContainer = document.getElementById('recentAttendance');
-  recentContainer.innerHTML = ''; // Clear previous
+  const tbody = document.getElementById('attendanceTableBody');
+  tbody.innerHTML = '';
 
   if (attendance && attendance.length > 0) {
-    const recent = attendance.slice(0, 7); // Get the 7 most recent records
-    recent.forEach(record => { // Use forEach for clarity
-        // Corrected: Make style selection case-insensitive
-        const isPresent = record.status.toUpperCase() === 'PRESENT';
-        const statusClass = isPresent ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+    attendance.forEach(record => {
+      // Corrected: Use case-insensitive check for status color
+      const isPresent = record.status.toUpperCase() === 'PRESENT';
+      const statusClass = isPresent ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
 
-        recentContainer.innerHTML += `
-          <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-            <div>
-              <p class="font-semibold text-gray-800">${new Date(record.date).toLocaleDateString()} - ${record.meal || ''}</p>
-              <p class="text-xs text-gray-500">${new Date(record.marked_at).toLocaleTimeString()}</p>
-            </div>
-            <span class="px-3 py-1 rounded-full text-xs font-semibold ${statusClass}">
+      const row = `
+        <tr>
+          <td class="px-4 py-3 text-sm text-gray-900">${record.students?.name || 'Unknown'}</td>
+          <td class="px-4 py-3 text-sm text-gray-900">${new Date(record.date).toLocaleDateString()}</td>
+          <td class="px-4 py-3 text-sm text-gray-900">${record.meal || 'N/A'}</td>
+          <td class="px-4 py-3 text-sm">
+            <span class="px-2 py-1 rounded-full text-xs ${statusClass}">
               ${record.status}
             </span>
-          </div>
-        `;
+          </td>
+          <td class="px-4 py-3 text-sm text-gray-900">${new Date(record.marked_at).toLocaleString()}</td>
+        </tr>
+      `;
+      tbody.innerHTML += row;
     });
   } else {
-    recentContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No attendance records yet</p>';
+    // Corrected colspan for the empty state message
+    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-3 text-center text-gray-500">No attendance records found</td></tr>';
   }
 }
 
@@ -812,6 +820,95 @@ window.deleteMenu = async function(menuId) {
   const { error } = await supabase.from('menu').delete().eq('id', menuId);
   if (error) { alert('Error deleting menu: ' + error.message); } else { loadMenu(); }
 };
+async function markAbsenteesForPreviousMeal() {
+    const adminId = await getAdminId();
+    if (!adminId) return;
+
+    const statusEl = document.getElementById('absenteeStatus');
+    const btn = document.getElementById('markAbsenteesBtn');
+    btn.disabled = true;
+    statusEl.textContent = 'Processing...';
+
+    const previousMeal = getPreviousMealType();
+    if (!previousMeal) {
+        statusEl.textContent = 'No previous meal to mark for today yet.';
+        setTimeout(() => { statusEl.textContent = ''; btn.disabled = false; }, 3000);
+        return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    try {
+        // 1. Get all active students for this mess
+        const { data: students, error: studentError } = await supabase
+            .from('students')
+            .select('id')
+            .eq('mess_id', adminId)
+            .eq('status', 'Active'); // Only consider active students
+        if (studentError) throw new Error('Could not fetch students.');
+        if (!students || students.length === 0) throw new Error('No active students found.');
+
+        // 2. Get today's attendance records for the PREVIOUS meal
+        const { data: presentAttendance, error: attendanceError } = await supabase
+            .from('attendance')
+            .select('student_id')
+            .eq('mess_id', adminId)
+            .eq('date', today)
+            .eq('meal', previousMeal);
+        if (attendanceError) throw new Error('Could not fetch attendance records.');
+
+        const presentStudentIds = new Set(presentAttendance.map(a => a.student_id));
+
+        // 3. Find students who were NOT present
+        const absentStudents = students.filter(s => !presentStudentIds.has(s.id));
+
+        if (absentStudents.length === 0) {
+             statusEl.textContent = `All active students were present for ${previousMeal}.`;
+             setTimeout(() => { statusEl.textContent = ''; btn.disabled = false; }, 3000);
+             return;
+        }
+
+        // 4. Prepare records to insert
+        const recordsToInsert = absentStudents.map(student => ({
+            student_id: student.id,
+            mess_id: adminId,
+            date: today,
+            meal: previousMeal,
+            status: 'ABSENT', // Mark as ABSENT
+            marked_at: new Date() // Record when the admin marked them absent
+        }));
+
+        // 5. Insert absent records
+        const { error: insertError } = await supabase
+            .from('attendance')
+            .insert(recordsToInsert);
+        if (insertError) {
+             // Handle potential race condition if a record was added manually just now
+             if (insertError.code === '23505') { // unique_violation
+                statusEl.textContent = `Some students were already marked. Re-run if needed.`;
+             } else {
+                throw new Error('Could not mark absentees.');
+             }
+        } else {
+            statusEl.textContent = `Marked ${recordsToInsert.length} student(s) as absent for ${previousMeal}.`;
+        }
+
+         // Refresh the attendance view
+        loadAttendance();
+
+    } catch (error) {
+        console.error("Error marking absentees:", error);
+        statusEl.textContent = `Error: ${error.message}`;
+        statusEl.classList.add('text-red-500');
+    } finally {
+         // Re-enable button after a delay
+         setTimeout(() => {
+             statusEl.textContent = '';
+             statusEl.classList.remove('text-red-500');
+             btn.disabled = false;
+         }, 5000);
+    }
+}
 
 // --- MODAL AND FORM LOGIC ---
 function showModal(title, content) {
@@ -1020,4 +1117,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkAuth();
   setupNavigation();
   loadDashboard();
+  document.getElementById('markAbsenteesBtn').addEventListener('click', markAbsenteesForPreviousMeal);
 });

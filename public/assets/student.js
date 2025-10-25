@@ -66,36 +66,54 @@ async function loadStudentInfo() {
   }
 }
 
-
 async function loadAttendanceStats() {
   if (!currentStudent) return;
 
   const { data: attendance } = await supabase
     .from('attendance')
     .select('*')
-    .eq('student_id', currentStudent.id);
+    .eq('student_id', currentStudent.id)
+    .order('marked_at', { ascending: false });
 
-  const totalDays = attendance?.length || 0;
-  const presentDays = attendance?.filter(a => a.status === 'Present').length || 0;
-  const attendanceRate = totalDays > 0 ? ((presentDays / totalDays) * 100).toFixed(1) : 0;
+  const totalRecords = attendance?.length || 0;
+  const presentRecords = attendance?.filter(a => a.status.toUpperCase() === 'PRESENT') || [];
+
+  // --- CORRECTED DAYS PRESENT CALCULATION ---
+  // 1. Get all unique dates where the student was present
+  const presentDates = new Set(presentRecords.map(record => record.date));
+  // 2. Count the number of unique dates
+  const distinctDaysPresent = presentDates.size;
+  // --- END OF CORRECTION ---
+
+  // Calculate attendance rate based on records (meals), as before
+  const attendanceRate = totalRecords > 0 ? ((presentRecords.length / totalRecords) * 100).toFixed(1) : 0;
 
   document.getElementById('attendancePercentage').textContent = `${attendanceRate}%`;
-  document.getElementById('daysPresent').textContent = presentDays;
+  // Update the display to use the distinct day count
+  document.getElementById('daysPresent').textContent = distinctDaysPresent;
 
   const recentContainer = document.getElementById('recentAttendance');
+  recentContainer.innerHTML = ''; // Clear previous
+
   if (attendance && attendance.length > 0) {
     const recent = attendance.slice(0, 7);
-    recentContainer.innerHTML = recent.map(record => `
-      <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-        <div>
-          <p class="font-semibold text-gray-800">${new Date(record.date).toLocaleDateString()}</p>
-          <p class="text-xs text-gray-500">${new Date(record.marked_at).toLocaleTimeString()}</p>
-        </div>
-        <span class="px-3 py-1 rounded-full text-xs font-semibold ${record.status === 'Present' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-          ${record.status}
-        </span>
-      </div>
-    `).join('');
+    recent.forEach(record => {
+        const isPresent = record.status.toUpperCase() === 'PRESENT';
+        const statusClass = isPresent ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+        const mealText = record.meal ? ` - ${record.meal}` : '';
+
+        recentContainer.innerHTML += `
+          <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+            <div>
+              <p class="font-semibold text-gray-800">${new Date(record.date).toLocaleDateString()}${mealText}</p>
+              <p class="text-xs text-gray-500">${new Date(record.marked_at).toLocaleTimeString()}</p>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-semibold ${statusClass}">
+              ${record.status}
+            </span>
+          </div>
+        `;
+    });
   } else {
     recentContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No attendance records yet</p>';
   }
