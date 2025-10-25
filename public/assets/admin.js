@@ -670,41 +670,47 @@ async function saveMessInfo(event) {
 // Attach listener to the form
 document.getElementById('messInfoForm').addEventListener('submit', saveMessInfo);
 
-async function loadAttendance() {
-    const adminId = await getAdminId();
-    if (!adminId) return;
+async function loadAttendanceStats() {
+  if (!currentStudent) return;
 
   const { data: attendance } = await supabase
     .from('attendance')
-    .select(`
-      *,
-      students (name)
-    `)
-    .eq('mess_id', adminId)
-    .order('date', { ascending: false })
-    .limit(100);
+    .select('*')
+    .eq('student_id', currentStudent.id)
+    .order('marked_at', { ascending: false }); // Order by time marked
 
-  const tbody = document.getElementById('attendanceTableBody');
-  tbody.innerHTML = '';
+  const totalRecords = attendance?.length || 0;
+  // Corrected: Make calculation case-insensitive
+  const presentRecords = attendance?.filter(a => a.status.toUpperCase() === 'PRESENT').length || 0;
+  const attendanceRate = totalRecords > 0 ? ((presentRecords / totalRecords) * 100).toFixed(1) : 0;
+
+  document.getElementById('attendancePercentage').textContent = `${attendanceRate}%`;
+  document.getElementById('daysPresent').textContent = presentRecords; // Display count of present records
+
+  const recentContainer = document.getElementById('recentAttendance');
+  recentContainer.innerHTML = ''; // Clear previous
 
   if (attendance && attendance.length > 0) {
-    attendance.forEach(record => {
-      const row = `
-        <tr>
-          <td class="px-4 py-3 text-sm text-gray-900">${record.students?.name || 'Unknown'}</td>
-          <td class="px-4 py-3 text-sm text-gray-900">${new Date(record.date).toLocaleDateString()}</td>
-          <td class="px-4 py-3 text-sm">
-            <span class="px-2 py-1 rounded-full text-xs ${record.status === 'Present' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+    const recent = attendance.slice(0, 7); // Get the 7 most recent records
+    recent.forEach(record => { // Use forEach for clarity
+        // Corrected: Make style selection case-insensitive
+        const isPresent = record.status.toUpperCase() === 'PRESENT';
+        const statusClass = isPresent ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+
+        recentContainer.innerHTML += `
+          <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+            <div>
+              <p class="font-semibold text-gray-800">${new Date(record.date).toLocaleDateString()} - ${record.meal || ''}</p>
+              <p class="text-xs text-gray-500">${new Date(record.marked_at).toLocaleTimeString()}</p>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-semibold ${statusClass}">
               ${record.status}
             </span>
-          </td>
-          <td class="px-4 py-3 text-sm text-gray-900">${new Date(record.marked_at).toLocaleString()}</td>
-        </tr>
-      `;
-      tbody.innerHTML += row;
+          </div>
+        `;
     });
   } else {
-    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-3 text-center text-gray-500">No attendance records found</td></tr>';
+    recentContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No attendance records yet</p>';
   }
 }
 
