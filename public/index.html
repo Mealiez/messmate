@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mess Management System - Smart RFID Attendance</title>
+  <title>Messmate - Smart Mess Management System </title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
   <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
@@ -24,10 +24,8 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16">
         <div class="flex items-center">
-          <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-          </svg>
-          <span class="ml-2 text-xl font-bold text-gray-800">MessMate</span>
+          <img src="assets/logo.png" alt="Messmate Logo" class="h-8 w-8">
+          <span class="ml-2 text-xl font-bold text-orange-600">MessMate</span>
         </div>
         <div class="hidden md:flex items-center space-x-8">
           <a href="#home" class="text-gray-700 hover:text-blue-600 transition">Home</a>
@@ -61,18 +59,18 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
       <div class="text-center" data-aos="fade-up">
         <h1 class="text-5xl md:text-6xl font-bold mb-6">
-          Digitize Your Mess with<br>
-          <span class="text-blue-400">Smart RFID Attendance</span>
+          Find Your Next Meal.<br>
+          <span class="text-blue-400">Run Your Best Mess.</span>
         </h1>
         <p class="text-xl md:text-2xl mb-8 text-gray-300">
-          Streamline mess operations with automated attendance, billing, and menu management
+           The all-in-one marketplace for students to discover local messes and a powerful management platform for owners to streamline their entire operation.
         </p>
         <div class="flex justify-center gap-4">
           <a href="register.html" class="bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-700 transition transform hover:scale-105">
             Get Started Free
           </a>
-          <a href="#features" class="bg-white text-gray-800 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-gray-100 transition transform hover:scale-105">
-            Learn More
+          <a href="#browse" class="bg-white text-gray-800 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-gray-100 transition transform hover:scale-105">
+            Browse mess
           </a>
         </div>
       </div>
@@ -95,7 +93,7 @@
             </svg>
           </div>
           <h3 class="text-xl font-bold text-gray-800 mb-2">Student Management</h3>
-          <p class="text-gray-600">Complete student profiles with RFID tags, room assignments, and plan management</p>
+          <p class="text-gray-600">Complete student profiles, attendence logs, payment history and plan management</p>
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition" data-aos="fade-up" data-aos-delay="200">
@@ -105,7 +103,7 @@
             </svg>
           </div>
           <h3 class="text-xl font-bold text-gray-800 mb-2">Smart Attendance</h3>
-          <p class="text-gray-600">RFID-based automatic attendance tracking with real-time analytics</p>
+          <p class="text-gray-600">QR code based high-speed automatic attendance tracking with real-time analytics</p>
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition" data-aos="fade-up" data-aos-delay="300">
@@ -136,44 +134,50 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="text-center mb-16" data-aos="fade-up">
         <h2 class="text-4xl font-bold text-gray-800 mb-4">Simple Pricing</h2>
-        <p class="text-xl text-gray-600">Choose the plan that fits your mess needs</p>
+        <p class="text-xl text-gray-600">Choose the plan that's right for your mess. No hidden fees.</p>
       </div>
 
       <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
         <div class="bg-white border-2 border-gray-200 rounded-xl p-8 hover:border-blue-500 transition" data-aos="fade-up" data-aos-delay="100">
-          <h3 class="text-2xl font-bold text-gray-800 mb-2">Weekly Plan</h3>
+          <h3 class="text-2xl font-bold text-gray-800 mb-2">Starter Plan</h3>
           <div class="mb-6">
-            <span class="text-4xl font-bold text-gray-800">₹500</span>
-            <span class="text-gray-600">/week</span>
+            <span class="text-4xl font-bold text-gray-800">₹999</span>
+            <span class="text-gray-600">/month</span>
           </div>
           <ul class="space-y-3 mb-8">
             <li class="flex items-center text-gray-700">
               <svg class="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              All 3 meals included
+              List on Marketplace
             </li>
             <li class="flex items-center text-gray-700">
               <svg class="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              RFID attendance tracking
+              Up to 50 Students
             </li>
             <li class="flex items-center text-gray-700">
               <svg class="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              Digital receipts
+              QR Attendance System
             </li>
             <li class="flex items-center text-gray-700">
               <svg class="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              Parent access
+              Menu Management
+            </li>
+            <li class="flex items-center text-gray-700">
+              <svg class="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              Student Management
             </li>
           </ul>
           <a href="register.html" class="block text-center bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition">
-            Choose Weekly
+            Choose Starter
           </a>
         </div>
 
@@ -181,9 +185,9 @@
           <div class="bg-yellow-400 text-blue-900 text-xs font-bold px-3 py-1 rounded-full inline-block mb-4">
             MOST POPULAR
           </div>
-          <h3 class="text-2xl font-bold mb-2">Monthly Plan</h3>
+          <h3 class="text-2xl font-bold mb-2">Pro Plan</h3>
           <div class="mb-6">
-            <span class="text-4xl font-bold">₹1,500</span>
+            <span class="text-4xl font-bold">₹1,299</span>
             <span class="text-blue-200">/month</span>
           </div>
           <ul class="space-y-3 mb-8">
@@ -191,35 +195,35 @@
               <svg class="h-5 w-5 text-yellow-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              All 3 meals included
+              Everything in Starter, plus:
             </li>
             <li class="flex items-center">
               <svg class="h-5 w-5 text-yellow-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              RFID attendance tracking
+              Up to 100 Students
             </li>
             <li class="flex items-center">
               <svg class="h-5 w-5 text-yellow-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              Digital receipts
+              Full Payment Management & Tracking
             </li>
             <li class="flex items-center">
               <svg class="h-5 w-5 text-yellow-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              Parent access
+              Advanced Analytics & Reports
             </li>
             <li class="flex items-center">
               <svg class="h-5 w-5 text-yellow-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              Save ₹500/month
-            </li>
+              On-site Setup & Training
+            </li>  
           </ul>
           <a href="register.html" class="block text-center bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition">
-            Choose Monthly
+            Choose Pro
           </a>
         </div>
       </div>
@@ -230,8 +234,8 @@
 <section id="browse" class="py-20 bg-gray-50">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="text-center mb-12" data-aos="fade-up">
-      <h2 class="text-4xl font-bold text-gray-800 mb-4">Browse Available Messes</h2>
-      <p class="text-xl text-gray-600">Find the perfect mess near you</p>
+      <h2 class="text-4xl font-bold text-gray-800 mb-4">Find Your Perfect Mess</h2>
+      <p class="text-xl text-gray-600">Search for messes near your college. Your next favorite meal is just a click away.</p>
     </div>
 
     <!-- Filters -->
@@ -265,9 +269,7 @@
       <div class="grid md:grid-cols-4 gap-8">
         <div>
           <div class="flex items-center mb-4">
-            <svg class="h-8 w-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
+            <img src="assets/logo.png" alt="Messmate Logo" class="h-8 w-8">
             <span class="ml-2 text-xl font-bold">MessMate</span>
           </div>
           <p class="text-gray-400">Revolutionizing mess management with smart technology</p>
@@ -290,13 +292,13 @@
         <div>
           <h4 class="font-bold mb-4">Contact</h4>
           <ul class="space-y-2">
-            <li class="text-gray-400">Email: support@messmate.com</li>
-            <li class="text-gray-400">Phone: +91 9876543210</li>
+            <li class="text-gray-400">Email: </li>
+            <li class="text-gray-400">Phone: +91 9270398199</li>
           </ul>
         </div>
       </div>
       <div class="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-        <p>&copy; 2024 MessMate. All rights reserved.</p>
+        <p>&copy; Desinged & Devloped By <a href="https://www.instagram.com/harsh_potdar23?igsh=MWQ4NGw0aDZpZWt2cQ==" class="font-bold mb-4">Harsh Potdar</a> </p>
       </div>
     </div>
   </footer>

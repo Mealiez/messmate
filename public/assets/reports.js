@@ -7,6 +7,12 @@ let reportData = {
   payments: []
 };
 
+// --- FIX: Helper function to get Admin ID ---
+async function getAdminId() {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user ? user.id : null;
+}
+
 async function checkAuth() {
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -37,7 +43,14 @@ function setDefaultDates() {
   document.getElementById('startDate').valueAsDate = thirtyDaysAgo;
 }
 
+// --- FIX: This function now filters by mess_id ---
 async function generateReport() {
+  const adminId = await getAdminId();
+  if (!adminId) {
+    alert('Could not verify admin. Please log in again.');
+    return;
+  }
+
   const startDate = document.getElementById('startDate').value;
   const endDate = document.getElementById('endDate').value;
   const planType = document.getElementById('planType').value;
@@ -47,7 +60,8 @@ async function generateReport() {
     return;
   }
 
-  let studentsQuery = supabase.from('students').select('*');
+  let studentsQuery = supabase.from('students').select('*')
+                            .eq('mess_id', adminId); // Filter by Admin/Mess ID
   if (planType) {
     studentsQuery = studentsQuery.eq('plan_type', planType);
   }
@@ -59,6 +73,7 @@ async function generateReport() {
       *,
       students (name, plan_type)
     `)
+    .eq('mess_id', adminId) // Filter by Admin/Mess ID
     .gte('date', startDate)
     .lte('date', endDate);
 
@@ -68,6 +83,7 @@ async function generateReport() {
       *,
       students (name, plan_type)
     `)
+    .eq('mess_id', adminId) // Filter by Admin/Mess ID
     .gte('due_date', startDate)
     .lte('due_date', endDate);
 
@@ -81,15 +97,15 @@ async function generateReport() {
   updateCharts();
 }
 
+// --- FIX: This function uses the correct 'paid_amount' and 'total_amount' logic ---
 function updateSummaryStats() {
   document.getElementById('reportTotalStudents').textContent = reportData.students.length;
 
-  const paidPayments = reportData.payments.filter(p => p.status === 'Paid');
-  const totalRevenue = paidPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+  const totalRevenue = reportData.payments?.reduce((sum, p) => sum + parseFloat(p.paid_amount || 0), 0) || 0;
   document.getElementById('reportTotalRevenue').textContent = `₹${totalRevenue.toFixed(0)}`;
 
-  const pendingPayments = reportData.payments.filter(p => p.status === 'Pending');
-  const pendingAmount = pendingPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+  const totalBilled = reportData.payments?.reduce((sum, p) => sum + parseFloat(p.total_amount || 0), 0) || 0;
+  const pendingAmount = totalBilled - totalRevenue;
   document.getElementById('reportPendingAmount').textContent = `₹${pendingAmount.toFixed(0)}`;
 
   const presentCount = reportData.attendance.filter(a => a.status === 'Present').length;
@@ -166,6 +182,7 @@ function createAttendanceChart() {
   });
 }
 
+// --- FIX: This chart now uses the correct 'paid_amount' and 'total_amount' logic ---
 function createRevenueChart() {
   const ctx = document.getElementById('reportRevenueChart');
 
@@ -174,12 +191,12 @@ function createRevenueChart() {
   }
 
   const paid = reportData.payments
-    .filter(p => p.status === 'Paid')
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    .reduce((sum, p) => sum + parseFloat(p.paid_amount || 0), 0);
 
-  const pending = reportData.payments
-    .filter(p => p.status === 'Pending')
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+  const totalBilled = reportData.payments
+    .reduce((sum, p) => sum + parseFloat(p.total_amount || 0), 0);
+  
+  const pending = totalBilled - paid;
 
   revenueChart = new Chart(ctx, {
     type: 'doughnut',
@@ -189,7 +206,7 @@ function createRevenueChart() {
         data: [paid, pending],
         backgroundColor: [
           'rgba(34, 197, 94, 0.8)',
-          'rgba(251, 191, 36, 0.8)'
+          'rgba(239, 68, 68, 0.8)' // Changed to red
         ]
       }]
     },
@@ -222,11 +239,12 @@ function exportAttendanceCSV() {
   downloadCSV(csvContent, 'attendance_report.csv');
 }
 
+// --- FIX: This CSV export now uses the correct 'total_amount' column ---
 function exportPaymentsCSV() {
   const headers = ['Student Name', 'Amount', 'Due Date', 'Status', 'Paid On'];
   const rows = reportData.payments.map(payment => [
     payment.students?.name || 'Unknown',
-    payment.amount,
+    payment.total_amount, // <-- Corrected from 'amount'
     payment.due_date,
     payment.status,
     payment.paid_on || 'N/A'
@@ -252,34 +270,7 @@ function downloadCSV(content, filename) {
   window.URL.revokeObjectURL(url);
 }
 
-function exportAttendancePDF() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-
-  doc.setFontSize(18);
-  doc.text('Attendance Report', 105, 15, { align: 'center' });
-
-  doc.setFontSize(10);
-  doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
-
-  const tableData = reportData.attendance.map(record => [
-    record.students?.name || 'Unknown',
-    new Date(record.date).toLocaleDateString(),
-    record.status,
-    new Date(record.marked_at).toLocaleString()
-  ]);
-
-  doc.autoTable({
-    startY: 30,
-    head: [['Student Name', 'Date', 'Status', 'Marked At']],
-    body: tableData,
-    theme: 'grid',
-    headStyles: { fillColor: [59, 130, 246] }
-  });
-
-  doc.save('attendance_report.pdf');
-}
-
+// --- FIX: This PDF export now uses the correct 'paid_amount' and 'total_amount' logic ---
 function exportPaymentsPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
@@ -290,20 +281,22 @@ function exportPaymentsPDF() {
   doc.setFontSize(10);
   doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
 
+  // Correct calculation
   const paidTotal = reportData.payments
-    .filter(p => p.status === 'Paid')
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    .reduce((sum, p) => sum + parseFloat(p.paid_amount || 0), 0);
 
-  const pendingTotal = reportData.payments
-    .filter(p => p.status === 'Pending')
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+  const totalBilled = reportData.payments
+    .reduce((sum, p) => sum + parseFloat(p.total_amount || 0), 0);
+  
+  const pendingTotal = totalBilled - paidTotal;
 
   doc.text(`Total Paid: ₹${paidTotal.toFixed(2)}`, 20, 30);
   doc.text(`Total Pending: ₹${pendingTotal.toFixed(2)}`, 20, 37);
 
+  // Correct data in table
   const tableData = reportData.payments.map(payment => [
     payment.students?.name || 'Unknown',
-    `₹${payment.amount}`,
+    `₹${payment.total_amount}`, // <-- Corrected from 'amount'
     new Date(payment.due_date).toLocaleDateString(),
     payment.status,
     payment.paid_on ? new Date(payment.paid_on).toLocaleDateString() : 'N/A'

@@ -171,6 +171,16 @@ function setupNavigation() {
   const sections = document.querySelectorAll('.content-section');
   navLinks.forEach(link => {
     link.addEventListener('click', (e) => {
+      
+      const sectionName = link.dataset.section;
+
+      // If the link has no data-section (like the "Reports" link),
+      // let the browser navigate normally and stop this script.
+      if (!sectionName) {
+        return;
+      }
+
+      // Only prevent default for in-page section links
       e.preventDefault();
 
       navLinks.forEach(l => l.classList.remove('bg-blue-600'));
@@ -178,7 +188,6 @@ function setupNavigation() {
       link.classList.add('bg-blue-600');
       link.classList.remove('hover:bg-gray-800');
 
-      const sectionName = link.dataset.section;
       sections.forEach(s => s.classList.add('hidden'));
       document.getElementById(`${sectionName}Section`).classList.remove('hidden');
 
@@ -215,7 +224,6 @@ function setupNavigation() {
     });
   });
 }
-
 
 
 async function displayMessId() {
