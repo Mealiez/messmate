@@ -259,6 +259,146 @@ async function checkTodayAttendance() {
   }
 }
 
+// --- REVIEW FUNCTIONS ---
+
+// --- FIX: This function now correctly creates the SVG stars ---
+function setupStarRating() {
+  const container = document.getElementById('starRatingContainer');
+  const ratingInput = document.getElementById('starRating');
+  container.innerHTML = ''; // Clear placeholder
+
+  for (let i = 1; i <= 5; i++) {
+    const star = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    star.setAttribute('data-value', i);
+    star.setAttribute('class', 'h-8 w-8 text-gray-400 cursor-pointer');
+    star.setAttribute('fill', 'currentColor');
+    star.setAttribute('viewBox', '0 0 24 24'); // Use 24x24 viewbox for consistency
+    star.setAttribute('stroke', 'none');
+    
+    // Use the filled star path
+    star.innerHTML = `<path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118L2.98 9.1c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>`;
+    
+    star.addEventListener('click', () => {
+      ratingInput.value = i;
+      updateStars(i);
+    });
+    
+    star.addEventListener('mouseover', () => updateStars(i, true));
+    star.addEventListener('mouseout', () => updateStars(parseInt(ratingInput.value)));
+    
+    container.appendChild(star);
+  }
+}
+
+function updateStars(rating, isHover = false) {
+  const stars = document.querySelectorAll('#starRatingContainer svg');
+  stars.forEach(star => {
+    const starValue = parseInt(star.getAttribute('data-value'));
+    if (starValue <= rating) {
+      star.classList.remove('text-gray-400');
+      star.classList.add(isHover ? 'text-yellow-300' : 'text-yellow-500');
+    } else {
+      star.classList.remove('text-yellow-500', 'text-yellow-300');
+      star.classList.add('text-gray-400');
+    }
+  });
+}
+
+async function loadMyReview() {
+  if (!currentStudent) return;
+
+  const { data: review, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('student_id', currentStudent.id)
+    .maybeSingle();
+
+  if (review) {
+    document.getElementById('starRating').value = review.rating;
+    updateStars(review.rating);
+    document.getElementById('reviewText').value = review.review_text || '';
+    document.getElementById('submitReviewBtn').textContent = 'Update My Review';
+    document.getElementById('deleteReviewBtn').classList.remove('hidden');
+  } else {
+    // No review yet, ensure fields are clear
+    document.getElementById('starRating').value = 0;
+    updateStars(0);
+    document.getElementById('reviewText').value = '';
+    document.getElementById('submitReviewBtn').textContent = 'Submit Review';
+    document.getElementById('deleteReviewBtn').classList.add('hidden');
+  }
+}
+
+async function handleSubmitReview(e) {
+  e.preventDefault();
+  if (!currentStudent) return;
+
+  const rating = parseInt(document.getElementById('starRating').value);
+  const reviewText = document.getElementById('reviewText').value;
+  const msgEl = document.getElementById('reviewMessage');
+
+  if (rating === 0) {
+    msgEl.textContent = 'Please select a rating (1-5 stars)';
+    msgEl.className = 'text-sm text-red-600';
+    return;
+  }
+
+  msgEl.textContent = 'Submitting...';
+  msgEl.className = 'text-sm text-gray-500';
+
+  const { error } = await supabase
+    .from('reviews')
+    .upsert(
+      {
+        student_id: currentStudent.id,
+        mess_id: currentStudent.mess_id,
+        rating: rating,
+        review_text: reviewText
+      },
+      { onConflict: 'student_id' } // This makes it an "update if exists"
+    );
+  
+  if (error) {
+    msgEl.textContent = 'Error: ' + error.message;
+    msgEl.className = 'text-sm text-red-600';
+  } else {
+    msgEl.textContent = 'Review submitted successfully!';
+    msgEl.className = 'text-sm text-green-600';
+    document.getElementById('submitReviewBtn').textContent = 'Update My Review';
+    document.getElementById('deleteReviewBtn').classList.remove('hidden');
+  }
+}
+
+async function handleDeleteReview() {
+  if (!currentStudent || !confirm('Are you sure you want to delete your review?')) return;
+
+  const msgEl = document.getElementById('reviewMessage');
+  msgEl.textContent = 'Deleting...';
+  msgEl.className = 'text-sm text-gray-500';
+
+  const { error } = await supabase
+    .from('reviews')
+    .delete()
+    .eq('student_id', currentStudent.id);
+
+  if (error) {
+    msgEl.textContent = 'Error: ' + error.message;
+    msgEl.className = 'text-sm text-red-600';
+  } else {
+    msgEl.textContent = 'Review deleted.';
+    msgEl.className = 'text-sm text-green-600';
+    // Reset the form
+    document.getElementById('starRating').value = 0;
+    updateStars(0);
+    document.getElementById('reviewText').value = '';
+    document.getElementById('submitReviewBtn').textContent = 'Submit Review';
+    document.getElementById('deleteReviewBtn').classList.add('hidden');
+  }
+}
+
+// --- END REVIEW FUNCTIONS ---
+
+
 document.getElementById('markAttendanceBtn').addEventListener('click', async () => {
   if (!currentStudent || !currentStudent.mess_id) return;
 
@@ -329,7 +469,7 @@ document.getElementById('downloadReceiptBtn').addEventListener('click', async ()
   doc.text(`Room: ${currentStudent.room_no}`, 20, 60);
   doc.text(`Plan: ${currentStudent.plan_type}`, 20, 70);
 
-  doc.text(`Amount Paid: ₹${payment.amount}`, 20, 90);
+  doc.text(`Amount Paid: ₹${payment.total_amount}`, 20, 90); // Use total_amount
   doc.text(`Payment Date: ${new Date(payment.paid_on).toLocaleDateString()}`, 20, 100);
   doc.text(`Status: ${payment.status}`, 20, 110);
 
@@ -350,5 +490,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadTodayMenu();
     await checkTodayAttendance();
     await loadPlanDaysRemaining();
+    
+    // --- NEW REVIEW LISTENERS ---
+    setupStarRating();
+    await loadMyReview();
+    document.getElementById('reviewForm').addEventListener('submit', handleSubmitReview);
+    document.getElementById('deleteReviewBtn').addEventListener('click', handleDeleteReview);
   }
 });

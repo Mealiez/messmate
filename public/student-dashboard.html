@@ -169,8 +169,47 @@
       </div>
     </div>
 
+    <div class="bg-white rounded-xl shadow-lg p-6">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">My Review</h2>
+      <form id="reviewForm" class="space-y-4">
+        <div>
+          <label class="block text-gray-700 font-semibold mb-2">Rating</label>
+          <div class="flex items-center space-x-1" id="starRatingContainer">
+            <p class="text-gray-500">Select your rating</p>
+          </div>
+          <input type="hidden" id="starRating" value="0">
+        </div>
+        <div>
+          <label class="block text-gray-700 font-semibold mb-2">Review (optional)</label>
+          <textarea
+            id="reviewText"
+            rows="4"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            placeholder="Share your experience with this mess..."
+          ></textarea>
+        </div>
+        <div class="flex items-center justify-between">
+          <button
+            type="submit"
+            id="submitReviewBtn"
+            class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition"
+          >
+            Submit Review
+          </button>
+          <button
+            type="button"
+            id="deleteReviewBtn"
+            class="hidden bg-red-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-red-700 transition"
+          >
+            Delete My Review
+          </button>
+        </div>
+        <p id="reviewMessage" class="text-sm h-4"></p>
+      </form>
+    </div>
+
   </div>
 </main>
-  <script type="module" src="./assets/student.js"></script>
+  <script type="module" src="./assets/student.js?v=1.1"></script>
 </body>
 </html>
