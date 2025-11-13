@@ -600,12 +600,11 @@ async function loadStudents() {
                 const plan = plans.find(p => p.name === student.plan_type);
                 if (plan) {
                     const startDate = new Date(student.plan_start_date);
-                    // Cloning date object to avoid mutation
                     const expiryDate = new Date(startDate.getTime());
                     expiryDate.setDate(expiryDate.getDate() + plan.duration_days);
                     
                     const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize today's date to the start of the day
+                    today.setHours(0, 0, 0, 0);
 
                     const diffTime = expiryDate - today;
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -617,7 +616,6 @@ async function loadStudents() {
                 <tr>
                     <td class="px-4 py-3 text-sm text-gray-900">${student.name}</td>
                     <td class="px-4 py-3 text-sm text-gray-900">${student.email}</td>
-                    <td class="px-4 py-3 text-sm text-gray-900">${student.rfid_tag}</td>
                     <td class="px-4 py-3 text-sm text-gray-900">${student.room_no}</td>
                     <td class="px-4 py-3 text-sm text-gray-900">${student.plan_type}</td>
                     <td class="px-4 py-3 text-sm font-semibold ${remainingDays === 'Expired' ? 'text-red-500' : 'text-gray-900'}">${remainingDays}</td>
@@ -635,7 +633,7 @@ async function loadStudents() {
             tbody.innerHTML += row;
         });
     } else {
-        tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-3 text-center text-gray-500">No students found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-3 text-center text-gray-500">No students found</td></tr>';
     }
 }
 
@@ -977,11 +975,13 @@ window.closeModal = function() {
 document.getElementById('addStudentBtn').addEventListener('click', async () => {
     const adminId = await getAdminId();
     if (!adminId) return;
-    const formContent = `<form id="addStudentForm" class="space-y-4"><input type="text" id="studentName" placeholder="Full Name" required class="w-full px-4 py-2 border rounded-lg"><input type="email" id="studentEmail" placeholder="Email" required class="w-full px-4 py-2 border rounded-lg"><input type="text" id="studentMobile" placeholder="Mobile" required class="w-full px-4 py-2 border rounded-lg"><input type="text" id="studentRfid" placeholder="RFID Tag" required class="w-full px-4 py-2 border rounded-lg"><input type="text" id="studentRoom" placeholder="Room No" required class="w-full px-4 py-2 border rounded-lg"><select id="studentPlan" class="w-full px-4 py-2 border rounded-lg"><option value="Monthly">Monthly</option><option value="Weekly">Weekly</option></select><button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">Add Student</button></form>`;
+    // REMOVED RFID INPUT FROM FORM CONTENT
+    const formContent = `<form id="addStudentForm" class="space-y-4"><input type="text" id="studentName" placeholder="Full Name" required class="w-full px-4 py-2 border rounded-lg"><input type="email" id="studentEmail" placeholder="Email" required class="w-full px-4 py-2 border rounded-lg"><input type="text" id="studentMobile" placeholder="Mobile" required class="w-full px-4 py-2 border rounded-lg"><input type="text" id="studentRoom" placeholder="Room No" required class="w-full px-4 py-2 border rounded-lg"><select id="studentPlan" class="w-full px-4 py-2 border rounded-lg"><option value="Monthly">Monthly</option><option value="Weekly">Weekly</option></select><button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">Add Student</button></form>`;
     showModal('Add New Student', formContent);
     document.getElementById('addStudentForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const { error } = await supabase.from('students').insert({ name: document.getElementById('studentName').value, email: document.getElementById('studentEmail').value, mobile: document.getElementById('studentMobile').value, rfid_tag: document.getElementById('studentRfid').value, room_no: document.getElementById('studentRoom').value, plan_type: document.getElementById('studentPlan').value, status: 'Active', mess_id: adminId });
+      // REMOVED RFID FROM INSERT
+      const { error } = await supabase.from('students').insert({ name: document.getElementById('studentName').value, email: document.getElementById('studentEmail').value, mobile: document.getElementById('studentMobile').value, room_no: document.getElementById('studentRoom').value, plan_type: document.getElementById('studentPlan').value, status: 'Active', mess_id: adminId });
       if (error) { alert('Error adding student: ' + error.message); } else { closeModal(); loadStudents(); loadDashboard(); }
     });
 });
