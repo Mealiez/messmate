@@ -230,7 +230,7 @@ messListingsContainer.addEventListener('click', (e) => {
                                 <span class="font-bold text-gray-800 text-sm">${r.student_name}</span>
                                 <div class="flex">${getStarRatingHTML(r.rating)}</div>
                             </div>
-                            <p class="text-gray-600 text-sm italic">"${r.comment || 'No comment'}"</p>
+                            <p class="text-gray-600 text-sm italic">"${r.review_text || 'No comment'}"</p>
                             <p class="text-xs text-gray-400 mt-2">${new Date(r.created_at).toLocaleDateString()}</p>
                         </div>
                     `).join('');

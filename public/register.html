@@ -120,21 +120,40 @@
     const planTypeSelect = document.getElementById('planType');
     const licenseKeyField = document.getElementById('licenseKeyField');
     const licenseKeyInput = document.getElementById('licenseKey');
-    const roleNote = document.getElementById('roleNote'); // NEW variable
+    const roleNote = document.getElementById('roleNote');
+    
+    // --- NEW: Admin Plan Selection Element ---
+    // We create this dynamically or you can add it to HTML, but let's inject it to keep HTML clean
+    const adminPlanDiv = document.createElement('div');
+    adminPlanDiv.id = 'adminPlanDiv';
+    adminPlanDiv.className = 'hidden mb-4'; // Hidden by default
+    adminPlanDiv.innerHTML = `
+        <label class="block text-gray-700 font-semibold mb-2">Choose Admin Plan</label>
+        <select id="adminPlan" class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+            <option value="free">Free (List Mess Only)</option>
+            <option value="starter">Starter (Manage Students & Attendance)</option>
+            <option value="pro">Pro (Full Access + Reports)</option>
+        </select>
+    `;
+    // Insert it after License Key field
+    licenseKeyField.parentNode.insertBefore(adminPlanDiv, licenseKeyField.nextSibling);
+    
+    const adminPlanSelect = document.getElementById('adminPlan');
 
     roleSelect.addEventListener('change', () => {
         const role = roleSelect.value;
         const mobileInput = document.getElementById('mobile');
         const roomInput = document.getElementById('roomNo');
 
-        // Reset all conditional fields
+        // Reset UI
         studentFields.style.display = 'none';
         licenseKeyField.classList.add('hidden');
-        planTypeDiv.classList.add('hidden');
+        adminPlanDiv.classList.add('hidden'); // Hide plan selector
+        planTypeDiv.classList.add('hidden'); 
         planTypeSelect.innerHTML = '<option value="" disabled selected>Enter Mess ID first</option>';
-        roleNote.classList.add('hidden'); // Hide note by default
+        roleNote.classList.add('hidden'); 
 
-        // Reset requirements
+        // Reset constraints
         licenseKeyInput.required = false;
         mobileInput.required = false;
         roomInput.required = false;
@@ -147,29 +166,29 @@
             roomInput.required = true;
             messIdInput.required = true;
             planTypeSelect.required = true;
-            
-            // NEW: Show Student Note
             roleNote.textContent = "For mess id contact mess owner directly";
             roleNote.classList.remove('hidden');
 
         } else if (role === 'admin') {
             licenseKeyField.classList.remove('hidden');
             licenseKeyInput.required = true;
+            
+            // Show Admin Plan Selector
+            adminPlanDiv.classList.remove('hidden');
 
-            // NEW: Show Admin Note
             roleNote.textContent = "For license key contact technical team";
             roleNote.classList.remove('hidden');
         }
     });
+    
+    // Trigger change to set initial state
+    roleSelect.dispatchEvent(new Event('change'));
 
     // Debounce function
     function debounce(func, wait) {
         let timeout;
         return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
+            const later = () => { clearTimeout(timeout); func(...args); };
             clearTimeout(timeout);
             timeout = setTimeout(later, wait);
         };
@@ -178,21 +197,14 @@
     const fetchPlans = debounce(async () => {
         const role = roleSelect.value;
         if (role !== 'student') return;
-
         const messId = messIdInput.value.trim();
         planTypeDiv.classList.add('hidden');
         planTypeSelect.innerHTML = '<option value="" disabled selected>Loading plans...</option>';
-
         if (!messId) {
             planTypeSelect.innerHTML = '<option value="" disabled selected>Enter Mess ID first</option>';
             return;
         }
-
-        const { data: plans, error } = await supabase
-            .from('plans')
-            .select('name, price')
-            .eq('mess_id', messId);
-
+        const { data: plans, error } = await supabase.from('plans').select('name, price').eq('mess_id', messId);
         if (error) {
             planTypeSelect.innerHTML = '<option value="" disabled selected>Invalid Mess ID</option>';
         } else if (plans && plans.length > 0) {
@@ -205,20 +217,17 @@
             });
             planTypeDiv.classList.remove('hidden');
         } else {
-            planTypeSelect.innerHTML = '<option value="" disabled selected>No plans found for this mess</option>';
+            planTypeSelect.innerHTML = '<option value="" disabled selected>No plans found</option>';
         }
     }, 500);
 
     messIdInput.addEventListener('input', fetchPlans);
-    roleSelect.dispatchEvent(new Event('change'));
 
     function showError(message) {
       errorMessage.textContent = message;
       errorAlert.classList.remove('hidden');
       successAlert.classList.add('hidden');
-      setTimeout(() => {
-        errorAlert.classList.add('hidden');
-      }, 5000);
+      setTimeout(() => errorAlert.classList.add('hidden'), 5000);
     }
 
     function showSuccess(message) {
@@ -229,17 +238,19 @@
 
     registerForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-
         const role = roleSelect.value;
         const name = document.getElementById('name').value;
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
         const confirmPassword = document.getElementById('confirmPassword').value;
+        
+        // Get chosen plan for admin (default to 'free' if not admin)
+        const subscriptionPlan = role === 'admin' ? adminPlanSelect.value : 'free';
 
         if (role === 'admin') {
             const licenseKey = licenseKeyInput.value;
             if (licenseKey !== '9270398199') {
-                showError('Incorrect license key. Contact the administrator.');
+                showError('Incorrect license key.');
                 return;
             }
         }
@@ -256,12 +267,18 @@
             const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
             if (authError) throw new Error(authError.message);
 
-            const { error: profileError } = await supabase.from('user_profiles').insert({ id: authData.user.id, role: role, full_name: name });
-            if (profileError) throw new Error('Failed to create user profile: ' + profileError.message);
+            // Insert profile with subscription_plan
+            const { error: profileError } = await supabase.from('user_profiles').insert({ 
+                id: authData.user.id, 
+                role: role, 
+                full_name: name,
+                subscription_plan: subscriptionPlan 
+            });
+            
+            if (profileError) throw new Error('Failed to create profile: ' + profileError.message);
 
             if (role === 'student') {
                 const mobile = document.getElementById('mobile').value;
-                // REMOVED RFID TAG RETRIEVAL
                 const roomNo = document.getElementById('roomNo').value;
                 const planName = planTypeSelect.value;
                 const messId = messIdInput.value;
@@ -273,7 +290,6 @@
                     return;
                 }
 
-                // REMOVED RFID TAG FROM INSERT
                 const { error: studentError } = await supabase.from('students').insert({
                     user_id: authData.user.id, name, email, mobile,
                     plan_type: planName,
@@ -282,16 +298,10 @@
                 if (studentError) throw new Error('Failed to create student record: ' + studentError.message);
             }
 
-            if (role === 'student') {
-                showSuccess('Registration successful! Redirecting...');
-                setTimeout(() => { window.location.href = 'student-dashboard.html'; }, 2000);
-            } else if (role === 'admin') {
-                showSuccess('Admin registration successful! Redirecting...');
-                setTimeout(() => { window.location.href = 'admin-dashboard.html'; }, 2000);
-            } else if (role === 'parent') {
-                showSuccess('Parent registration successful! Redirecting...');
-                setTimeout(() => { window.location.href = 'parent-dashboard.html'; }, 2000);
-            }
+            showSuccess('Registration successful! Redirecting...');
+            if (role === 'student') setTimeout(() => { window.location.href = 'student-dashboard.html'; }, 2000);
+            else if (role === 'admin') setTimeout(() => { window.location.href = 'admin-dashboard.html'; }, 2000);
+            else setTimeout(() => { window.location.href = 'parent-dashboard.html'; }, 2000);
 
         } catch (error) {
             showError(error.message);
@@ -299,6 +309,4 @@
             registerBtn.textContent = 'Register';
         }
     });
-  </script>
-</body>
-</html>
+</script>

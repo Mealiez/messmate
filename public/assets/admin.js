@@ -8,6 +8,64 @@ async function getAdminId() {
   return user ? user.id : null;
 }
 
+// --- NEW: Feature plan Logic ---
+function applyPlanFeatures(plan) {
+  console.log("Applying features for plan:", plan);
+
+  const navLinks = document.querySelectorAll('.nav-link');
+  
+  // Iterate through all navigation links to show/hide based on plan
+  navLinks.forEach(link => {
+    const section = link.dataset.section;
+    const isReportLink = link.getAttribute('href') && link.getAttribute('href').includes('report.html');
+    const isLogout = link.id === 'logoutBtn' || (link.innerText && link.innerText.includes('Logout'));
+
+    // Logic Tree for Plans
+    if (plan === 'pro') {
+      // PRO: Show Everything
+      link.classList.remove('hidden');
+    } 
+    else if (plan === 'starter') {
+      // STARTER: Hide Reports link, Show Everything Else
+      if (isReportLink) {
+        link.classList.add('hidden');
+      } else {
+        link.classList.remove('hidden');
+      }
+    } 
+    else {
+      // FREE (or unknown): Hide Everything EXCEPT Mess Info
+      // We also always keep the 'Logout' button visible
+      if (section === 'messInfo' || section === 'plans' || isLogout) {
+         link.classList.remove('hidden');
+      } else {
+         link.classList.add('hidden');
+      }
+    }
+  });
+
+  // Force Redirect for Free Plan if on a restricted page
+  // (Default page is usually Dashboard, so we switch to Mess Info)
+  if (plan === 'free' || !plan) {
+      const messInfoSection = document.getElementById('messInfoSection');
+      const dashboardSection = document.getElementById('dashboardSection');
+      
+      // If dashboard is currently visible (which is default), hide it and show Mess Info
+      if (dashboardSection && !dashboardSection.classList.contains('hidden')) {
+          dashboardSection.classList.add('hidden');
+          if (messInfoSection) messInfoSection.classList.remove('hidden');
+          
+          // Update Title
+          const pageTitle = document.getElementById('pageTitle');
+          if(pageTitle) pageTitle.textContent = "Mess Info";
+          
+          // Load Data for Mess Info
+          if (typeof loadMessInfo === 'function') loadMessInfo();
+      }
+  }
+}
+
+// --- UPDATED: checkAuth Function ---
 async function checkAuth() {
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -16,17 +74,25 @@ async function checkAuth() {
     return;
   }
 
-  const { data: profile } = await supabase
+  // Fetch role AND subscription_plan
+  const { data: profile, error } = await supabase
     .from('user_profiles')
-    .select('role')
+    .select('role, subscription_plan')
     .eq('id', user.id)
     .maybeSingle();
 
-  if (!profile || profile.role !== 'admin') {
+  if (error || !profile || profile.role !== 'admin') {
     alert('Access denied. Admin privileges required.');
     await supabase.auth.signOut();
     window.location.href = 'login.html';
+    return;
   }
+
+  // Default to 'free' if no plan is set in database
+  const currentPlan = profile.subscription_plan || 'free';
+  
+  // Apply the plan logic
+  applyPlanFeatures(currentPlan);
 }
 
 // --- QR SCANNER FUNCTIONS ---
@@ -783,7 +849,7 @@ async function loadPayments() {
       const row = `
         <tr>
           <td class="px-4 py-3 text-sm text-gray-900">${payment.students?.name || 'Unknown'}</td>
-          <td class="px-4 py-3 text-sm text-gray-900">₹${payment.amount}</td>
+          <td class="px-4 py-3 text-sm text-gray-900">₹${payment.paid_amount}</td>
           <td class="px-4 py-3 text-sm text-gray-900">${new Date(payment.due_date).toLocaleDateString()}</td>
           <td class="px-4 py-3 text-sm">
             <span class="px-2 py-1 rounded-full text-xs ${payment.status === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
@@ -1155,10 +1221,23 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   window.location.href = 'login.html';
 });
 
+// --- UPDATED: Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
-  await checkAuth();
-  setupSidebarToggle();
-  setupNavigation();
-  loadDashboard();
-  document.getElementById('markAbsenteesBtn').addEventListener('click', markAbsenteesForPreviousMeal);
+  await checkAuth(); // This now triggers applyPlanFeatures
+  
+  // Initialize UI elements
+  if (typeof setupSidebarToggle === 'function') setupSidebarToggle();
+  if (typeof setupNavigation === 'function') setupNavigation();
+  
+  // Only load dashboard if visible (Pro/Starter), otherwise checkAuth handled the redirect
+  const dashboardSection = document.getElementById('dashboardSection');
+  if (dashboardSection && !dashboardSection.classList.contains('hidden')) {
+      if (typeof loadDashboard === 'function') loadDashboard();
+  }
+  
+  // Helper for the 'Mark Absentees' button if it exists
+  const markBtn = document.getElementById('markAbsenteesBtn');
+  if (markBtn && typeof markAbsenteesForPreviousMeal === 'function') {
+      markBtn.addEventListener('click', markAbsenteesForPreviousMeal);
+  }
 });

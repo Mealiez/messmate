@@ -137,14 +137,58 @@
         <p class="text-xl text-gray-600">Choose the plan that's right for your mess. No hidden fees.</p>
       </div>
 
-      <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-        <div class="bg-white border-2 border-gray-200 rounded-xl p-8 hover:border-blue-500 transition" data-aos="fade-up" data-aos-delay="100">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-7xl mx-auto">
+        
+        <div class="bg-white border-2 border-gray-200 rounded-xl p-8 hover:border-gray-400 transition flex flex-col" data-aos="fade-up">
+          <h3 class="text-2xl font-bold text-gray-800 mb-2">Free Plan</h3>
+          <div class="mb-6">
+            <span class="text-4xl font-bold text-gray-800">₹0</span>
+            <span class="text-gray-600">/forever</span>
+          </div>
+          <ul class="space-y-3 mb-8 flex-1">
+            <li class="flex items-center text-gray-700">
+              <svg class="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              List on Marketplace
+            </li>
+            <li class="flex items-center text-gray-700">
+              <svg class="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              Basic Mess Info Page
+            </li>
+            <li class="flex items-center text-gray-700">
+              <svg class="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+              Update or Add plans
+            </li>
+            <li class="flex items-center text-gray-400">
+              <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              No Student Management
+            </li>
+             <li class="flex items-center text-gray-400">
+              <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              No Attendance Tracking
+            </li>
+          </ul>
+          <a href="register.html" class="block text-center bg-gray-100 text-gray-800 px-6 py-3 rounded-lg font-semibold hover:bg-gray-200 transition">
+            Get Started
+          </a>
+        </div>
+
+        <div class="bg-white border-2 border-gray-200 rounded-xl p-8 hover:border-blue-500 transition flex flex-col" data-aos="fade-up" data-aos-delay="100">
           <h3 class="text-2xl font-bold text-gray-800 mb-2">Starter Plan</h3>
           <div class="mb-6">
             <span class="text-4xl font-bold text-gray-800">₹499</span>
             <span class="text-gray-600">/month</span>
           </div>
-          <ul class="space-y-3 mb-8">
+          <ul class="space-y-3 mb-8 flex-1">
             <li class="flex items-center text-gray-700">
               <svg class="h-5 w-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
@@ -181,8 +225,8 @@
           </a>
         </div>
 
-        <div class="bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl p-8 shadow-xl transform md:scale-105" data-aos="fade-up" data-aos-delay="200">
-          <div class="bg-yellow-400 text-blue-900 text-xs font-bold px-3 py-1 rounded-full inline-block mb-4">
+        <div class="bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl p-8 shadow-xl transform md:scale-105 flex flex-col" data-aos="fade-up" data-aos-delay="200">
+          <div class="bg-yellow-400 text-blue-900 text-xs font-bold px-3 py-1 rounded-full inline-block mb-4 w-max">
             MOST POPULAR
           </div>
           <h3 class="text-2xl font-bold mb-2">Pro Plan</h3>
@@ -190,7 +234,7 @@
             <span class="text-4xl font-bold">₹799</span>
             <span class="text-blue-200">/month</span>
           </div>
-          <ul class="space-y-3 mb-8">
+          <ul class="space-y-3 mb-8 flex-1">
             <li class="flex items-center">
               <svg class="h-5 w-5 text-yellow-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
@@ -207,13 +251,13 @@
               <svg class="h-5 w-5 text-yellow-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              Full Payment Management & Tracking
+              Full Payment Management
             </li>
             <li class="flex items-center">
               <svg class="h-5 w-5 text-yellow-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
               </svg>
-              Advanced Analytics & Reports
+              Advanced Analytics
             </li>
             <li class="flex items-center">
               <svg class="h-5 w-5 text-yellow-300 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -226,6 +270,7 @@
             Choose Pro
           </a>
         </div>
+
       </div>
     </div>
   </section>
