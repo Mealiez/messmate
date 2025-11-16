@@ -119,50 +119,99 @@ async function loadAttendanceStats() {
   }
 }
 
+// --- FIXED: Payment Ledger Logic for Student ---
 async function loadPaymentInfo() {
   if (!currentStudent) return;
 
-  const { data: payments } = await supabase
+  // 1. Fetch ALL transactions (Bills AND Payments)
+  const { data: payments, error } = await supabase
     .from('payments')
     .select('*')
     .eq('student_id', currentStudent.id)
-    .order('due_date', { ascending: false });
+    .order('created_at', { ascending: false }); // Newest first
 
   const statusEl = document.getElementById('paymentStatus');
   const historyContainer = document.getElementById('paymentHistory');
+  
+  if (!statusEl || !historyContainer) return;
+
   historyContainer.innerHTML = ''; // Clear previous entries
 
   if (!payments || payments.length === 0) {
     statusEl.innerHTML = `<span class="text-green-600">No Bills</span>`;
-    historyContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No payment records</p>';
+    historyContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No transaction history.</p>';
     return;
   }
-  
-  const pendingPayments = payments.filter(p => p.status === 'Pending' || p.status === 'Partially Paid');
 
-  if (pendingPayments.length > 0) {
-    const nextDue = pendingPayments[0];
-    const dueAmount = nextDue.total_amount - nextDue.paid_amount;
-    statusEl.innerHTML = `<span class="text-red-600">Due: ₹${dueAmount.toFixed(2)}</span>`;
+  // 2. Calculate Ledger Balance (Total Billed - Total Paid)
+  let totalBilled = 0;
+  let totalPaid = 0;
+
+  payments.forEach(p => {
+      totalBilled += parseFloat(p.total_amount || 0);
+      totalPaid += parseFloat(p.paid_amount || 0);
+  });
+
+  const netDue = totalBilled - totalPaid;
+
+  // 3. Update Status Card (Top Card)
+  // Use a small buffer (0.5) for float precision issues
+  if (netDue <= 0.5) {
+    statusEl.innerHTML = `<span class="text-green-600">Fully Paid</span>`;
+    // Optional: Show credit if they overpaid
+    if (netDue < -0.5) {
+        statusEl.innerHTML = `<span class="text-green-600">Credit: ₹${Math.abs(netDue).toFixed(2)}</span>`;
+    }
   } else {
-    statusEl.innerHTML = `<span class="text-green-600">All Paid</span>`;
+    statusEl.innerHTML = `<span class="text-red-600">Due: ₹${netDue.toFixed(2)}</span>`;
   }
   
-  payments.slice(0, 5).forEach(payment => {
-      const remaining = payment.total_amount - payment.paid_amount;
-      const statusColor = payment.status === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
+  // 4. Render History List (Distinguish Bills vs Payments)
+  payments.forEach(payment => {
+      const bill = parseFloat(payment.total_amount || 0);
+      const pay = parseFloat(payment.paid_amount || 0);
       
+      let title = '';
+      let amountDisplay = '';
+      let icon = '';
+      let bgColor = '';
+
+      // Determine Row Type
+      if (bill > 0 && pay === 0) {
+          // It's a BILL
+          title = 'Bill Generated';
+          amountDisplay = `<span class="text-red-600 font-bold">- ₹${bill}</span>`;
+          bgColor = 'bg-white';
+          icon = `<div class="p-2 rounded-full bg-red-100 text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg></div>`;
+      } 
+      else if (bill === 0 && pay > 0) {
+          // It's a PAYMENT
+          title = 'Payment Made';
+          amountDisplay = `<span class="text-green-600 font-bold">+ ₹${pay}</span>`;
+          bgColor = 'bg-green-50';
+          icon = `<div class="p-2 rounded-full bg-green-100 text-green-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></div>`;
+      }
+      else {
+          // Mixed / Old Record
+          title = 'Transaction';
+          amountDisplay = `<span class="text-gray-600">₹${Math.max(bill, pay)}</span>`;
+          bgColor = 'bg-gray-50';
+          icon = `<div class="p-2 rounded-full bg-gray-200 text-gray-600">?</div>`;
+      }
+      
+      // Generate HTML
       historyContainer.innerHTML += `
-        <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-          <div>
-            <p class="font-semibold text-gray-800">Bill: ₹${payment.total_amount}</p>
-            <p class="text-xs text-gray-500">Paid: ₹${payment.paid_amount}</p>
-            <p class="text-xs text-red-500 font-semibold">Remaining: ₹${remaining > 0 ? remaining.toFixed(2) : 0}</p>
-            <p class="text-xs text-gray-500">Due: ${new Date(payment.due_date).toLocaleDateString()}</p>
+        <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg ${bgColor}">
+          <div class="flex items-center space-x-3">
+            ${icon}
+            <div>
+                <p class="font-semibold text-gray-800 text-sm">${title}</p>
+                <p class="text-xs text-gray-500">${new Date(payment.created_at || payment.due_date).toLocaleDateString()}</p>
+            </div>
           </div>
-          <span class="px-3 py-1 rounded-full text-xs font-semibold ${statusColor}">
-            ${payment.status}
-          </span>
+          <div class="text-right">
+            ${amountDisplay}
+          </div>
         </div>
       `;
   });
@@ -497,4 +546,156 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('reviewForm').addEventListener('submit', handleSubmitReview);
     document.getElementById('deleteReviewBtn').addEventListener('click', handleDeleteReview);
   }
+});
+
+// --- CHANGE MESS & AUTO-REMOVAL LOGIC ---
+
+const changeMessModal = document.getElementById('changeMessModal');
+const changeMessBtn = document.getElementById('changeMessBtn');
+const closeChangeMessBtn = document.getElementById('closeChangeMessBtn');
+const newMessIdInput = document.getElementById('newMessId');
+const newPlanDiv = document.getElementById('newPlanDiv');
+const newPlanSelect = document.getElementById('newPlanSelect');
+const changeMessForm = document.getElementById('changeMessForm');
+
+// 1. UI Toggles
+if(changeMessBtn) changeMessBtn.addEventListener('click', () => changeMessModal.classList.remove('hidden'));
+if(closeChangeMessBtn) closeChangeMessBtn.addEventListener('click', () => changeMessModal.classList.add('hidden'));
+
+// 2. Fetch Plans when Mess ID is entered (Debounced)
+let planTimeout;
+if(newMessIdInput) {
+    newMessIdInput.addEventListener('input', (e) => {
+        clearTimeout(planTimeout);
+        const messId = e.target.value.trim();
+        
+        if (!messId) {
+            newPlanDiv.classList.add('hidden');
+            return;
+        }
+
+        planTimeout = setTimeout(async () => {
+            const { data: plans, error } = await supabase
+                .from('plans')
+                .select('name, price')
+                .eq('mess_id', messId);
+
+            newPlanSelect.innerHTML = '<option value="" disabled selected>Select a plan</option>';
+            
+            if (!error && plans && plans.length > 0) {
+                plans.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.name;
+                    opt.textContent = `${p.name} (₹${p.price})`;
+                    newPlanSelect.appendChild(opt);
+                });
+                newPlanDiv.classList.remove('hidden');
+            } else {
+                // Invalid ID or no plans
+                const opt = document.createElement('option');
+                opt.textContent = "No plans found / Invalid ID";
+                newPlanSelect.appendChild(opt);
+                newPlanDiv.classList.remove('hidden');
+            }
+        }, 500);
+    });
+}
+
+// 3. Handle Switching Mess (Update Student Record)
+if(changeMessForm) {
+    changeMessForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const newMessId = newMessIdInput.value.trim();
+        const newPlan = newPlanSelect.value;
+        const confirmBtn = document.getElementById('confirmChangeBtn');
+
+        if (!newPlan || !newMessId) {
+            alert("Please select a valid mess and plan.");
+            return;
+        }
+
+        if (!confirm("Are you sure you want to switch to this mess? Your previous data will be archived.")) return;
+
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = "Joining...";
+
+        try {
+            // Update the EXISTING student record (Profile remains, Mess changes)
+            const { error } = await supabase
+                .from('students')
+                .update({
+                    mess_id: newMessId,
+                    plan_type: newPlan,
+                    plan_start_date: new Date().toISOString(), // Reset start date
+                    status: 'Active', // Reactivate if they were expired
+                    room_no: 'Not Assigned' // Reset room until admin assigns one
+                })
+                .eq('user_id', currentStudent.user_id);
+
+            if (error) throw error;
+
+            alert("Successfully joined new mess!");
+            location.reload(); // Reload to refresh dashboard data
+
+        } catch (err) {
+            console.error(err);
+            alert("Error joining mess: " + err.message);
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = "Confirm & Join";
+        }
+    });
+}
+
+// 4. AUTO-REMOVAL Logic (Run on Dashboard Load)
+async function checkAutoRemoval() {
+    if (!currentStudent || !currentStudent.mess_id || !currentStudent.plan_start_date) return;
+
+    // 1. Fetch plan duration
+    const { data: plan } = await supabase
+        .from('plans')
+        .select('duration_days')
+        .eq('mess_id', currentStudent.mess_id)
+        .eq('name', currentStudent.plan_type)
+        .single();
+
+    if (!plan) return;
+
+    // 2. Calculate dates
+    const startDate = new Date(currentStudent.plan_start_date);
+    const expiryDate = new Date(startDate);
+    expiryDate.setDate(startDate.getDate() + plan.duration_days);
+    
+    const removalThreshold = new Date(expiryDate);
+    removalThreshold.setDate(expiryDate.getDate() + 2); // +2 Days Buffer
+
+    const today = new Date();
+
+    // 3. Check if we are past the threshold
+    if (today > removalThreshold && currentStudent.mess_id !== null) {
+        console.log("Plan expired > 2 days ago. Auto-removing student from mess...");
+        
+        // "Remove" simply means setting mess_id to NULL so they are free
+        const { error } = await supabase
+            .from('students')
+            .update({ 
+                mess_id: null,
+                status: 'Inactive',
+                plan_type: null,
+                room_no: ''
+            })
+            .eq('id', currentStudent.id);
+
+        if (!error) {
+            alert("Your previous plan expired more than 2 days ago. You have been removed from the mess. Please join a new mess.");
+            location.reload();
+        }
+    }
+}
+
+// Add this to your init sequence
+document.addEventListener('DOMContentLoaded', async () => {
+    // ... existing calls ...
+    // Wait for currentStudent to be loaded, then check
+    setTimeout(checkAutoRemoval, 2000); 
 });
