@@ -828,47 +828,74 @@ async function loadAttendance() {
   }
 }
 
+// --- UPDATED: Payment History Table (Cleaner) ---
 async function loadPayments() {
     const adminId = await getAdminId();
     if (!adminId) return;
 
-  const { data: payments } = await supabase
-    .from('payments')
-    .select(`
-      *,
-      students (name)
-    `)
-    .eq('mess_id', adminId)
-    .order('due_date', { ascending: false });
+    const tbody = document.getElementById('paymentsTableBody');
+    if(tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Loading...</td></tr>';
 
-  const tbody = document.getElementById('paymentsTableBody');
-  tbody.innerHTML = '';
+    const { data: payments, error } = await supabase
+        .from('payments')
+        .select(`*, students (name)`)
+        .eq('mess_id', adminId)
+        .order('created_at', { ascending: false });
 
-  if (payments && payments.length > 0) {
-    payments.forEach(payment => {
-      const row = `
-        <tr>
-          <td class="px-4 py-3 text-sm text-gray-900">${payment.students?.name || 'Unknown'}</td>
-          <td class="px-4 py-3 text-sm text-gray-900">₹${payment.paid_amount}</td>
-          <td class="px-4 py-3 text-sm text-gray-900">${new Date(payment.due_date).toLocaleDateString()}</td>
-          <td class="px-4 py-3 text-sm">
-            <span class="px-2 py-1 rounded-full text-xs ${payment.status === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
-              ${payment.status}
-            </span>
-          </td>
-          <td class="px-4 py-3 text-sm">
-            ${payment.status === 'Pending' ? `<button onclick="markAsPaid('${payment.id}')" class="text-green-600 hover:text-green-800 mr-3">Mark Paid</button>` : ''}
-            <button onclick="deletePayment('${payment.id}')" class="text-red-600 hover:text-red-800">Delete</button>
-          </td>
-        </tr>
-      `;
-      tbody.innerHTML += row;
-    });
-  } else {
-    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-3 text-center text-gray-500">No payment records found</td></tr>';
-  }
+    if (error || !tbody) return;
+
+    tbody.innerHTML = '';
+
+    if (payments && payments.length > 0) {
+        payments.forEach(payment => {
+            const total = parseFloat(payment.total_amount || 0);
+            const paid = parseFloat(payment.paid_amount || 0);
+            
+            let displayAmount = '';
+            let statusBadge = '';
+            let rowColor = '';
+
+            // Logic: Differentiate between BILL (Debt) and PAYMENT (Credit)
+            if (total > 0 && paid === 0) {
+                // This is a BILL (e.g., Monthly Fee auto-generated)
+                displayAmount = `₹${total}`;
+                statusBadge = `<span class="px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">Bill Generated</span>`;
+                rowColor = 'bg-white'; 
+            } 
+            else if (total === 0 && paid > 0) {
+                // This is a PAYMENT (Money Received)
+                displayAmount = `<span class="text-green-600 font-bold">+ ₹${paid}</span>`;
+                statusBadge = `<span class="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Payment Received</span>`;
+                rowColor = 'bg-green-50';
+            }
+            else {
+                // Fallback for older/mixed records
+                displayAmount = `₹${total}`; 
+                statusBadge = `<span class="px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">${payment.status}</span>`;
+            }
+
+            const row = `
+                <tr class="${rowColor} hover:bg-gray-50 border-b">
+                    <td class="px-4 py-3 text-sm text-gray-900">
+                        <div class="font-medium">${payment.students?.name || 'Unknown'}</div>
+                        <div class="text-xs text-gray-500">${new Date(payment.created_at).toLocaleTimeString()}</div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 font-medium">${displayAmount}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${new Date(payment.due_date).toLocaleDateString()}</td>
+                    <td class="px-4 py-3 text-sm">${statusBadge}</td>
+                    <td class="px-4 py-3 text-sm text-right">
+                        <button onclick="deletePayment('${payment.id}')" class="text-red-600 hover:text-red-800 text-sm font-medium px-3 py-1 rounded hover:bg-red-50 transition">
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    } else {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500 italic">No transaction history found.</td></tr>';
+    }
 }
-
 async function loadMenu() {
     const adminId = await getAdminId();
     if (!adminId) return;
@@ -1052,113 +1079,164 @@ document.getElementById('addStudentBtn').addEventListener('click', async () => {
     });
 });
   
-document.getElementById('addPaymentBtn').addEventListener('click', async () => {
+// --- FIXED: Add Payment Logic ---
+// --- FIXED: Add Payment (Collect Money Only) ---
+document.getElementById('addPaymentBtn')?.addEventListener('click', async () => {
     const adminId = await getAdminId();
     if (!adminId) return;
 
-    const { data: students } = await supabase.from('students').select('id, name, plan_type').eq('mess_id', adminId);
-    const { data: plans } = await supabase.from('plans').select('name, price').eq('mess_id', adminId);
+    // 1. Fetch Balances
+    const { data: students } = await supabase.from('students').select('id, name').eq('mess_id', adminId);
+    const { data: payments } = await supabase.from('payments').select('student_id, total_amount, paid_amount').eq('mess_id', adminId);
 
-    const studentOptions = students.map(s => `<option value="${s.id}" data-plan="${s.plan_type}">${s.name}</option>`).join('');
+    const studentBalances = {};
+    students.forEach(s => studentBalances[s.id] = { name: s.name, pending: 0 });
+    
+    payments.forEach(p => {
+        if (studentBalances[p.student_id]) {
+            // Calculate: Sum(Bill) - Sum(Paid)
+            const pending = parseFloat(p.total_amount || 0) - parseFloat(p.paid_amount || 0);
+            studentBalances[p.student_id].pending += pending;
+        }
+    });
+
+    const studentOptions = students.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
 
     const formContent = `
         <form id="addPaymentForm" class="space-y-4">
             <div>
-                <label class="block">Student</label>
-                <select id="paymentStudent" class="w-full px-4 py-2 border rounded-lg">${studentOptions}</select>
+                <label class="block text-sm font-medium text-gray-700">Select Student</label>
+                <select id="paymentStudent" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500 bg-white">${studentOptions}</select>
+                <p id="balanceHint" class="text-xs mt-1 font-bold"></p>
             </div>
+            
             <div>
-                <label class="block">Total Bill Amount (₹)</label>
-                <input type="number" id="totalAmount" step="0.01" placeholder="e.g., 1500" required class="w-full px-4 py-2 border rounded-lg">
-            </div>
-            <div>
-                <label class="block">Payment Type</label>
-                <select id="paymentType" class="w-full px-4 py-2 border rounded-lg">
-                    <option value="Full">Full Payment</option>
-                    <option value="Installment">Installment</option>
+                <label class="block text-sm font-medium text-gray-700">Payment Type</label>
+                <select id="paymentType" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500 bg-white">
+                    <option value="Full">Full Payment (Clears Dues)</option>
+                    <option value="Installment">Installment / Partial Payment</option>
                 </select>
             </div>
-            <div id="amountPaidField" class="hidden">
-                <label class="block">Amount Being Paid Now (₹)</label>
-                <input type="number" id="amountPaid" step="0.01" placeholder="e.g., 500" class="w-full px-4 py-2 border rounded-lg">
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Bill Amount (Pending)</label>
+                <input type="number" id="totalAmount" step="0.01" class="w-full px-4 py-2 border rounded-lg bg-gray-100 text-gray-600" readonly>
             </div>
-             <div>
-                <label class="block">Due Date</label>
+
+            <div id="payAmountField" class="hidden">
+                <label class="block text-sm font-medium text-gray-700">Amount Collecting Now (₹)</label>
+                <input type="number" id="amountPaid" step="0.01" class="w-full px-4 py-2 border rounded-lg" placeholder="Enter amount">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Date</label>
                 <input type="date" id="paymentDueDate" required class="w-full px-4 py-2 border rounded-lg">
             </div>
-            <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">Create Bill</button>
+            
+            <div id="blockedMessage" class="hidden bg-green-100 text-green-800 p-4 rounded-lg text-center font-bold">
+                Student has no pending dues!
+            </div>
+
+            <button type="submit" id="submitPaymentBtn" class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 mt-2">Save Record</button>
         </form>
     `;
-    showModal('Create New Bill', formContent);
+    showModal('Add Payment', formContent);
 
-    // --- Add dynamic logic to the new form ---
+    // Logic Elements
     const studentSelect = document.getElementById('paymentStudent');
-    const totalAmountInput = document.getElementById('totalAmount');
-    const paymentTypeSelect = document.getElementById('paymentType');
-    const amountPaidField = document.getElementById('amountPaidField');
-    const amountPaidInput = document.getElementById('amountPaid');
+    const typeSelect = document.getElementById('paymentType');
+    const totalInput = document.getElementById('totalAmount'); // Read-only pending display
+    const paidInput = document.getElementById('amountPaid');
+    const payField = document.getElementById('payAmountField');
+    const balanceHint = document.getElementById('balanceHint');
+    const blockedMessage = document.getElementById('blockedMessage');
+    const submitBtn = document.getElementById('submitPaymentBtn');
+    
+    document.getElementById('paymentDueDate').valueAsDate = new Date();
 
-    // Auto-fill total amount based on student's plan
-    studentSelect.addEventListener('change', () => {
-        const selectedOption = studentSelect.options[studentSelect.selectedIndex];
-        const planName = selectedOption.dataset.plan;
-        const plan = plans.find(p => p.name === planName);
-        if (plan) {
-            totalAmountInput.value = plan.price;
-        }
-    });
-    studentSelect.dispatchEvent(new Event('change')); // Trigger on open
+    function updateUI() {
+        const sId = studentSelect.value;
+        const balance = studentBalances[sId]?.pending || 0;
+        const type = typeSelect.value;
 
-    // Show/hide installment field
-    paymentTypeSelect.addEventListener('change', () => {
-        if (paymentTypeSelect.value === 'Installment') {
-            amountPaidField.classList.remove('hidden');
-            amountPaidInput.required = true;
+        // 1. Display Pending Balance
+        totalInput.value = balance.toFixed(2);
+
+        if (balance <= 0.9) { // Buffer for float issues
+            balanceHint.textContent = "Status: Fully Paid";
+            balanceHint.className = "text-xs mt-1 font-bold text-green-600";
+            
+            // Block payments if fully paid
+            blockedMessage.classList.remove('hidden');
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            // Hide input fields to prevent confusion
+            totalInput.parentElement.classList.add('hidden');
+            payField.classList.add('hidden');
         } else {
-            amountPaidField.classList.add('hidden');
-            amountPaidInput.required = false;
-        }
-    });
+            balanceHint.textContent = `Pending Dues: ₹${balance.toFixed(0)}`;
+            balanceHint.className = "text-xs mt-1 font-bold text-red-600";
+            
+            // Enable payments
+            blockedMessage.classList.add('hidden');
+            submitBtn.disabled = false;
+            submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            totalInput.parentElement.classList.remove('hidden');
 
-    // Handle form submission
+            // 2. Handle Payment Type UI
+            if (type === 'Installment') {
+                payField.classList.remove('hidden');
+                paidInput.required = true;
+            } else {
+                // Full Payment
+                payField.classList.add('hidden');
+                paidInput.required = false;
+            }
+        }
+    }
+
+    studentSelect.addEventListener('change', updateUI);
+    typeSelect.addEventListener('change', updateUI);
+    if(studentSelect.options.length > 0) updateUI();
+
+    // Handle Submission
     document.getElementById('addPaymentForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const studentId = document.getElementById('paymentStudent').value;
-        const totalAmount = parseFloat(totalAmountInput.value);
-        const paymentType = paymentTypeSelect.value;
-        const dueDate = document.getElementById('paymentDueDate').value;
-        let amountPaid = 0;
-        let status = 'Pending';
-
-        if (paymentType === 'Full') {
-            amountPaid = totalAmount;
-            status = 'Paid';
-        } else { // Installment
-            amountPaid = parseFloat(amountPaidInput.value);
-            if (isNaN(amountPaid) || amountPaid <= 0) {
-                alert('Please enter a valid amount paid.');
-                return;
-            }
-            if (amountPaid >= totalAmount) {
-                status = 'Paid';
-            } else {
-                status = 'Partially Paid';
-            }
+        
+        const sId = studentSelect.value;
+        const balance = studentBalances[sId]?.pending || 0;
+        let amountToPay = 0;
+        
+        if (typeSelect.value === 'Full') {
+            amountToPay = balance; // Pay exactly what is owed
+        } else {
+            amountToPay = parseFloat(paidInput.value); // Pay manual amount
         }
 
+        if (amountToPay <= 0) {
+            alert("Payment amount must be valid.");
+            return;
+        }
+        if (amountToPay > balance + 10) { // Small buffer for tipping/overpay
+             if(!confirm("Amount is greater than pending dues. Continue?")) return;
+        }
+
+        // LOGIC: To reduce pending balance, we insert a record with:
+        // Total_Amount = 0 (No new debt)
+        // Paid_Amount = X (Paying off old debt)
         const { error } = await supabase.from('payments').insert({
-            student_id: studentId,
-            total_amount: totalAmount,
-            paid_amount: amountPaid,
-            last_paid_transaction: amountPaid, // Log this specific transaction
-            status: status,
-            due_date: dueDate,
+            student_id: sId,
+            total_amount: 0, 
+            paid_amount: amountToPay,
+            last_paid_transaction: amountToPay,
+            status: 'Paid',
+            due_date: document.getElementById('paymentDueDate').value,
             mess_id: adminId,
-            paid_on: (status === 'Paid' || status === 'Partially Paid') ? new Date().toISOString() : null
+            paid_on: new Date().toISOString()
         });
 
         if (error) {
-            alert('Error creating payment record: ' + error.message);
+            alert('Error: ' + error.message);
         } else {
             closeModal();
             loadPayments();
@@ -1239,5 +1317,155 @@ document.addEventListener('DOMContentLoaded', async () => {
   const markBtn = document.getElementById('markAbsenteesBtn');
   if (markBtn && typeof markAbsenteesForPreviousMeal === 'function') {
       markBtn.addEventListener('click', markAbsenteesForPreviousMeal);
+  }
+});
+
+// --- FIXED: Student Ledger (Payment Status) ---
+document.getElementById('paymentStatusBtn')?.addEventListener('click', async () => {
+  const adminId = await getAdminId();
+  if (!adminId) return;
+
+  // 1. Show Loading
+  showModal('Student Payment Status', '<div class="text-center py-8"><p class="text-gray-600 text-lg animate-pulse">Calculating balances...</p></div>');
+
+  try {
+    // 2. Fetch Data
+    const { data: students, error: stError } = await supabase
+      .from('students')
+      .select('id, name, room_no')
+      .eq('mess_id', adminId);
+
+    const { data: payments, error: payError } = await supabase
+      .from('payments')
+      .select('student_id, total_amount, paid_amount')
+      .eq('mess_id', adminId);
+
+    if (stError || payError) {
+      throw new Error(stError?.message || payError?.message || "Database error");
+    }
+
+    // 3. Aggregate Data
+    const ledger = {};
+
+    // Initialize ledger for all students
+    (students || []).forEach(s => {
+      ledger[s.id] = {
+        name: s.name,
+        room: s.room_no || 'N/A',
+        totalBilled: 0,
+        totalPaid: 0
+      };
+    });
+
+    // Sum up payments
+    (payments || []).forEach(p => {
+      if (ledger[p.student_id]) {
+        ledger[p.student_id].totalBilled += parseFloat(p.total_amount || 0);
+        ledger[p.student_id].totalPaid += parseFloat(p.paid_amount || 0);
+      }
+    });
+
+    // 4. Build Table HTML
+    let tableHtml = `
+      <div class="overflow-x-auto max-h-[60vh] border rounded-lg">
+        <table class="w-full text-left border-collapse">
+          <thead class="sticky top-0 bg-gray-100 z-10 shadow-sm">
+            <tr>
+              <th class="p-3 font-semibold text-gray-700 text-sm">Student</th>
+              <th class="p-3 font-semibold text-gray-700 text-sm text-right">Total Billed</th>
+              <th class="p-3 font-semibold text-gray-700 text-sm text-right">Total Paid</th>
+              <th class="p-3 font-semibold text-gray-700 text-sm text-right">Pending</th>
+              <th class="p-3 font-semibold text-gray-700 text-sm text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y bg-white">
+    `;
+
+    // Sort rows: Pending amounts first (descending), then fully paid
+    const sortedRecords = Object.values(ledger).sort((a, b) => {
+      const pendingA = a.totalBilled - a.totalPaid;
+      const pendingB = b.totalBilled - b.totalPaid;
+      return pendingB - pendingA; 
+    });
+
+    if (sortedRecords.length === 0) {
+        tableHtml += `<tr><td colspan="5" class="p-4 text-center text-gray-500">No students found.</td></tr>`;
+    } else {
+        sortedRecords.forEach(record => {
+          // Calculate Pending: Billed - Paid
+          const pending = record.totalBilled - record.totalPaid;
+          
+          // Logic: Paid if pending is effectively 0 (handling float precision)
+          const isPaid = pending <= 0.9; 
+          
+          const statusLabel = isPaid ? 'Paid' : 'Due';
+          const statusClass = isPaid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+          const rowClass = isPaid ? 'opacity-60 hover:opacity-100' : 'font-medium bg-red-50 hover:bg-red-100'; 
+
+          tableHtml += `
+            <tr class="transition-colors ${rowClass}">
+              <td class="p-3 text-sm text-gray-800 border-b-0">
+                <div class="font-bold">${record.name}</div>
+                <div class="text-xs text-gray-500">Room: ${record.room}</div>
+              </td>
+              <td class="p-3 text-sm text-right text-gray-600 border-b-0">₹${record.totalBilled.toFixed(0)}</td>
+              <td class="p-3 text-sm text-right text-green-600 border-b-0">₹${record.totalPaid.toFixed(0)}</td>
+              <td class="p-3 text-sm text-right border-b-0 ${isPaid ? 'text-gray-400' : 'text-red-600 font-bold'}">
+                ₹${pending > 0 ? pending.toFixed(0) : '0'}
+              </td>
+              <td class="p-3 text-center border-b-0">
+                <span class="px-2 py-1 rounded-full text-xs font-semibold ${statusClass}">
+                  ${statusLabel}
+                </span>
+              </td>
+            </tr>
+          `;
+        });
+    }
+
+    tableHtml += `</tbody></table></div>`;
+
+    // 5. Update Modal UI Safely
+    const modalContainer = document.getElementById('modalContainer');
+    
+    // Traverse DOM carefully to find the white box
+    // Structure: #modalContainer -> Fixed Overlay (div) -> White Box (div)
+    if (modalContainer && modalContainer.firstElementChild && modalContainer.firstElementChild.firstElementChild) {
+        const modalBox = modalContainer.firstElementChild.firstElementChild;
+
+        // Update classes to ensure it looks right (Wide width)
+        modalBox.className = 'bg-white rounded-lg shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] relative z-50 transition-all transform scale-100';
+        
+        modalBox.innerHTML = `
+          <div class="flex justify-between items-center p-5 border-b bg-gray-50 rounded-t-lg">
+            <h2 class="text-2xl font-bold text-gray-800">Student Balance Ledger</h2>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-700 transition text-3xl font-bold leading-none">&times;</button>
+          </div>
+          <div class="p-6 overflow-hidden flex flex-col bg-white rounded-b-lg">
+              ${tableHtml}
+          </div>
+        `;
+    } else {
+        // Fallback: If DOM structure is unexpected, rebuild modal from scratch
+        showModal('Student Balance Ledger', tableHtml);
+        const box = document.querySelector('#modalContainer > div > div');
+        if(box) box.classList.add('max-w-3xl');
+    }
+
+  } catch (err) {
+    console.error("Payment Status Error:", err);
+    // Update modal with error message
+    const modalContainer = document.getElementById('modalContainer');
+    if(modalContainer) {
+        modalContainer.innerHTML = `
+            <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm text-center">
+                    <div class="text-red-500 text-4xl mb-3">⚠️</div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-2">Error Loading Ledger</h3>
+                    <p class="text-gray-600 mb-4 text-sm">${err.message}</p>
+                    <button onclick="closeModal()" class="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300 w-full">Close</button>
+                </div>
+            </div>`;
+    }
   }
 });
