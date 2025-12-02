@@ -560,8 +560,15 @@ const changeMessForm = document.getElementById('changeMessForm');
 
 // 1. UI Toggles
 if(changeMessBtn) changeMessBtn.addEventListener('click', () => changeMessModal.classList.remove('hidden'));
-if(closeChangeMessBtn) closeChangeMessBtn.addEventListener('click', () => changeMessModal.classList.add('hidden'));
-
+if(closeChangeMessBtn) {
+    closeChangeMessBtn.addEventListener('click', () => {
+        changeMessModal.classList.add('hidden');
+        
+        // NEW: Reset the form on close
+        if(changeMessForm) changeMessForm.reset(); 
+        newPlanDiv.classList.add('hidden');
+    });
+}
 // 2. Fetch Plans when Mess ID is entered (Debounced)
 let planTimeout;
 if(newMessIdInput) {
