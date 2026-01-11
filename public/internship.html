@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join Us - Mealiez Internships</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <style>
+    .glass-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+    }
+    /* Smooth transition for hiding/showing */
+    .fade-enter {
+        animation: fadeIn 0.5s ease-in-out;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 font-sans antialiased">
+
+  <nav class="bg-white shadow-lg fixed w-full top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <a href="index.html" class="flex items-center">
+            <img src="assets/logo.png" alt="Mealiez Logo" class="h-8 w-8">
+            <span class="ml-2 text-xl font-bold text-orange-600">Mealiez</span>
+          </a>
+        </div>
+        <div class="flex items-center">
+          <a href="index.html" class="text-gray-700 hover:text-blue-600 transition font-medium">Back to Home</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white pt-32 pb-20 text-center">
+    <h1 class="text-4xl md:text-5xl font-bold mb-4" data-aos="fade-down">Join Our Team</h1>
+    <p class="text-blue-100 text-lg max-w-2xl mx-auto" data-aos="fade-up" data-aos-delay="100">
+      Kickstart your career with Mealiez. We are looking for passionate interns to build the future of mess management.
+    </p>
+  </div>
+
+  <section id="rolesSection" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 -mt-10 relative z-10 fade-enter">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      
+      <div class="glass-card rounded-2xl shadow-xl p-8 hover:shadow-2xl transition transform hover:-translate-y-2" data-aos="fade-up" data-aos-delay="100">
+        <div class="bg-purple-100 w-14 h-14 rounded-lg flex items-center justify-center mb-6">
+          <svg class="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
+          </svg>
+        </div>
+        <h3 class="text-2xl font-bold text-gray-800 mb-2">UI/UX Designer</h3>
+        <p class="text-gray-600 mb-6">Design intuitive interfaces and user experiences for our web and mobile platforms.</p>
+        <div class="flex gap-4">
+          <button onclick="openModal('uiux')" class="flex-1 bg-white border-2 border-purple-600 text-purple-600 py-2 rounded-lg font-semibold hover:bg-purple-50 transition">Details</button>
+          <button onclick="showForm('UI/UX Designer')" class="flex-1 bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700 transition">Apply Now</button>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-2xl shadow-xl p-8 hover:shadow-2xl transition transform hover:-translate-y-2" data-aos="fade-up" data-aos-delay="200">
+        <div class="bg-blue-100 w-14 h-14 rounded-lg flex items-center justify-center mb-6">
+          <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+          </svg>
+        </div>
+        <h3 class="text-2xl font-bold text-gray-800 mb-2">React Developer</h3>
+        <p class="text-gray-600 mb-6">Build responsive and dynamic frontend components using React, Tailwind, and Vite.</p>
+        <div class="flex gap-4">
+          <button onclick="openModal('react')" class="flex-1 bg-white border-2 border-blue-600 text-blue-600 py-2 rounded-lg font-semibold hover:bg-blue-50 transition">Details</button>
+          <button onclick="showForm('React Developer')" class="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition">Apply Now</button>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-2xl shadow-xl p-8 hover:shadow-2xl transition transform hover:-translate-y-2" data-aos="fade-up" data-aos-delay="300">
+        <div class="bg-green-100 w-14 h-14 rounded-lg flex items-center justify-center mb-6">
+          <svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+          </svg>
+        </div>
+        <h3 class="text-2xl font-bold text-gray-800 mb-2">Backend Developer</h3>
+        <p class="text-gray-600 mb-6">Manage database architecture, API integration, and server-side logic with Supabase.</p>
+        <div class="flex gap-4">
+          <button onclick="openModal('backend')" class="flex-1 bg-white border-2 border-green-600 text-green-600 py-2 rounded-lg font-semibold hover:bg-green-50 transition">Details</button>
+          <button onclick="showForm('Backend Developer')" class="flex-1 bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition">Apply Now</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="applicationForm" class="hidden max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 pt-8 -mt-10 relative z-10 fade-enter">
+    
+    <button onclick="showRoles()" class="mb-6 flex items-center text-gray-600 hover:text-blue-600 transition font-semibold">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+        Back to Roles
+    </button>
+
+    <div class="text-center mb-10">
+      <h2 class="text-3xl font-bold text-gray-800">Application Form</h2>
+      <p class="text-gray-600">Fill in your details below to apply.</p>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-xl p-8 border border-gray-100">
+      <div id="alertBox" class="hidden mb-6 p-4 rounded-lg"></div>
+
+      <form id="internForm" class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
+            <input type="text" id="name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Jane Doe">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
+            <input type="tel" id="phone" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="+91 9876543210">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+          <input type="email" id="email" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="jane@college.edu">
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-1">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Year</label>
+                <select id="year" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                  <option value="" disabled selected>Select Year</option>
+                  <option value="1st Year">1st Year</option>
+                  <option value="2nd Year">2nd Year</option>
+                  <option value="3rd Year">3rd Year</option>
+                  <option value="4th Year">4th Year</option>
+                  <option value="Graduate">Graduate</option>
+                </select>
+              </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">College Name</label>
+            <input type="text" id="college" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Institute of Technology...">
+          </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Branch / Stream</label>
+            <input type="text" id="branch" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Computer Science, IT, etc.">
+        </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Role Applying For</label>
+            <select id="roleSelection" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+              <option value="" disabled selected>Select a Role</option>
+              <option value="UI/UX Designer">UI/UX Designer</option>
+              <option value="React Developer">React Developer</option>
+              <option value="Backend Developer">Backend Developer</option>
+            </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-3">Tech Stack (Select all that apply)</label>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <label class="flex items-center space-x-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+              <input type="checkbox" name="techstack" value="React" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+              <span class="text-gray-700">React JS</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+              <input type="checkbox" name="techstack" value="Node.js" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+              <span class="text-gray-700">Node.js</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+              <input type="checkbox" name="techstack" value="Supabase" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+              <span class="text-gray-700">Supabase / SQL</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+              <input type="checkbox" name="techstack" value="Tailwind" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+              <span class="text-gray-700">Tailwind CSS</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+              <input type="checkbox" name="techstack" value="Figma" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+              <span class="text-gray-700">Figma / Adobe XD</span>
+            </label>
+            <label class="flex items-center space-x-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+              <input type="checkbox" name="techstack" value="Python" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+              <span class="text-gray-700">Python</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Upload CV / Resume (PDF only)</label>
+          <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-blue-500 transition cursor-pointer relative" id="dropZone">
+            <div class="space-y-1 text-center">
+              <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <div class="text-sm text-gray-600">
+                <label for="resume" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                  <span>Upload a file</span>
+                  <input id="resume" name="resume" type="file" accept=".pdf" class="sr-only" required>
+                </label>
+                <p class="pl-1">or drag and drop</p>
+              </div>
+              <p class="text-xs text-gray-500">PDF up to 5MB</p>
+              <p id="fileNameDisplay" class="text-sm font-bold text-gray-800 mt-2"></p>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" id="submitBtn" class="w-full bg-blue-600 text-white py-4 rounded-lg font-bold text-lg hover:bg-blue-700 transition transform hover:scale-[1.02] shadow-lg">
+          Submit Application
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <div id="jobModal" class="fixed inset-0 bg-gray-900 bg-opacity-60 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full transform transition-all scale-100 p-6 relative">
+        <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-800">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+        
+        <div id="modalContent"></div>
+
+        <div class="mt-8 flex justify-end">
+            <button onclick="closeModal()" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 transition mr-2">Close</button>
+            <button onclick="closeModalAndApply()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">Apply For This Role</button>
+        </div>
+    </div>
+  </div>
+
+  <footer class="bg-gray-900 text-white py-8 text-center mt-12">
+    <p>&copy; Mealiez. All rights reserved.</p>
+  </footer>
+
+  <script>
+    AOS.init();
+    
+    // File upload display logic
+    document.getElementById('resume').addEventListener('change', function(e) {
+        const fileName = e.target.files[0]?.name;
+        document.getElementById('fileNameDisplay').textContent = fileName ? `Selected: ${fileName}` : '';
+    });
+
+    // --- TOGGLE LOGIC ---
+    function showForm(role) {
+        // Hide Roles Section
+        document.getElementById('rolesSection').classList.add('hidden');
+        
+        // Show Form Section
+        const formSection = document.getElementById('applicationForm');
+        formSection.classList.remove('hidden');
+
+        // Pre-select Role
+        const select = document.getElementById('roleSelection');
+        if(select && role) select.value = role;
+
+        // Scroll to form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showRoles() {
+        // Hide Form
+        document.getElementById('applicationForm').classList.add('hidden');
+        
+        // Show Roles Section
+        document.getElementById('rolesSection').classList.remove('hidden');
+        
+        // Scroll to roles
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // --- MODAL LOGIC ---
+    const modal = document.getElementById('jobModal');
+    const modalContent = document.getElementById('modalContent');
+    let currentRoleForModal = '';
+
+    const roleDetails = {
+        'uiux': {
+            title: 'UI/UX Designer',
+            iconColor: 'text-purple-600',
+            bgColor: 'bg-purple-100',
+            description: 'We are looking for a creative UI/UX designer to craft intuitive and beautiful interfaces for our mess management system.',
+            points: [
+                'Design wireframes, prototypes, and high-fidelity mockups using Figma.',
+                'Collaborate with developers to ensure accurate implementation.',
+                'Conduct user research to improve UX flow.',
+                'Create responsive designs for Mobile and Web.'
+            ]
+        },
+        'react': {
+            title: 'React Developer',
+            iconColor: 'text-blue-600',
+            bgColor: 'bg-blue-100',
+            description: 'Join our frontend team to build a fast, responsive, and interactive dashboard for students and admins.',
+            points: [
+                'Develop reusable components using React.js and TypeScript.',
+                'Style applications using Tailwind CSS.',
+                'Integrate APIs and handle state management.',
+                'Optimize application performance and fix bugs.'
+            ]
+        },
+        'backend': {
+            title: 'Backend Developer',
+            iconColor: 'text-green-600',
+            bgColor: 'bg-green-100',
+            description: 'Help us scale our backend infrastructure and manage secure data flow using Supabase and SQL.',
+            points: [
+                'Design and maintain PostgreSQL database schemas.',
+                'Write optimized SQL queries and RLS policies.',
+                'Manage Authentication and Edge Functions.',
+                'Ensure data security and system reliability.'
+            ]
+        }
+    };
+
+    function openModal(roleKey) {
+        const data = roleDetails[roleKey];
+        if(!data) return;
+
+        currentRoleForModal = data.title; // Store title for "Apply" button
+
+        // Populate Modal
+        modalContent.innerHTML = `
+            <div class="flex items-center mb-4">
+                <div class="${data.bgColor} p-3 rounded-lg mr-4">
+                    <svg class="h-6 w-6 ${data.iconColor}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <h3 class="text-2xl font-bold text-gray-800">${data.title}</h3>
+            </div>
+            <p class="text-gray-600 mb-4">${data.description}</p>
+            <h4 class="font-semibold text-gray-800 mb-2">Key Responsibilities:</h4>
+            <ul class="list-disc list-inside space-y-2 text-gray-600 text-sm">
+                ${data.points.map(p => `<li>${p}</li>`).join('')}
+            </ul>
+        `;
+        modal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+        modal.classList.add('hidden');
+    }
+
+    function closeModalAndApply() {
+        closeModal();
+        showForm(currentRoleForModal);
+    }
+
+    // Close modal on outside click
+    modal.addEventListener('click', (e) => {
+        if(e.target === modal) closeModal();
+    });
+
+  </script>
+  <script type="module" src="./assets/internship.js"></script>
+</body>
+</html>
