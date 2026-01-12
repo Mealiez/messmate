@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HR Dashboard - Mealiez CA Program</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+  <div class="flex h-screen overflow-hidden">
+    <aside class="w-64 bg-gray-900 text-white flex-shrink-0 hidden md:flex flex-col">
+      <div class="p-6 text-xl font-bold border-b border-gray-700">Mealiez HR</div>
+      <nav class="flex-1 p-4 space-y-2">
+        <button onclick="switchTab('applicants')" id="btn-applicants" class="w-full text-left px-4 py-2 rounded bg-blue-600 hover:bg-gray-800 transition">CA Applicants</button>
+        <button onclick="switchTab('submissions')" id="btn-submissions" class="w-full text-left px-4 py-2 rounded hover:bg-gray-800 transition">Task Reviews</button>
+        <button onclick="switchTab('tasks')" id="btn-tasks" class="w-full text-left px-4 py-2 rounded hover:bg-gray-800 transition">Manage Tasks</button>
+        
+        <div class="pt-4 mt-4 border-t border-gray-700">
+            <p class="px-4 text-xs text-gray-500 uppercase font-semibold mb-2">Hiring</p>
+            <button onclick="switchTab('interns')" id="btn-interns" class="w-full text-left px-4 py-2 rounded hover:bg-gray-800 transition flex items-center">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                Intern Applications
+            </button>
+        </div>
+      </nav>
+      <div class="p-4 border-t border-gray-700">
+        <button id="logoutBtn" class="w-full bg-red-600 py-2 rounded hover:bg-red-700 transition">Logout</button>
+      </div>
+    </aside>
+
+    <main class="flex-1 overflow-y-auto p-8">
+      <header class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-800" id="pageTitle">CA Applicants</h1>
+      </header>
+
+      <div id="applicantsSection" class="content-section">
+        <div class="bg-white rounded-lg shadow overflow-hidden overflow-x-auto">
+          <table class="w-full whitespace-nowrap">
+            <thead class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <tr>
+                <th class="p-4">Candidate Profile</th>
+                <th class="p-4">Education</th>
+                <th class="p-4">The Pitch</th>
+                <th class="p-4">Resume</th>
+                <th class="p-4">Status</th>
+                <th class="p-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="applicantsTableBody" class="divide-y divide-gray-200">
+              </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="submissionsSection" class="content-section hidden">
+        <div class="grid gap-6" id="submissionsGrid"></div>
+      </div>
+
+      <div id="tasksSection" class="content-section hidden">
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-gray-800">Campus Ambassador Tasks</h3>
+                <button onclick="openTaskModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center shadow transition">
+                    <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    Add New Task
+                </button>
+            </div>
+            
+            <div class="overflow-hidden border border-gray-200 rounded-lg">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 text-gray-500 text-xs uppercase font-semibold">
+                        <tr>
+                            <th class="p-4">Task Title & Description</th>
+                            <th class="p-4 w-32 text-center">Points</th>
+                            <th class="p-4 w-32 text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tasksList" class="divide-y divide-gray-200 text-sm">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+      </div>
+
+      <div id="internsSection" class="content-section hidden">
+        <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="w-full whitespace-nowrap">
+                <thead class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <tr>
+                        <th class="p-4">Candidate</th>
+                        <th class="p-4">Role & Tech</th>
+                        <th class="p-4">Education</th>
+                        <th class="p-4">Resume</th>
+                        <th class="p-4">Applied On</th>
+                    </tr>
+                </thead>
+                <tbody id="internsTableBody" class="divide-y divide-gray-200">
+                    </tbody>
+            </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <div id="taskModal" class="fixed inset-0 bg-gray-900 bg-opacity-60 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md transform transition-all scale-100">
+        <div class="p-6 border-b flex justify-between items-center">
+            <h3 class="text-xl font-bold text-gray-800" id="modalTitle">Add New Task</h3>
+            <button onclick="closeTaskModal()" class="text-gray-500 hover:text-red-500 text-2xl">&times;</button>
+        </div>
+        <div class="p-6">
+            <form id="taskForm" class="space-y-4">
+                <input type="hidden" id="taskId"> 
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Task Title</label>
+                    <input type="text" id="taskTitle" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="e.g. Share Reel on Story">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Description</label>
+                    <textarea id="taskDesc" rows="3" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Instructions for the student..."></textarea>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Points Reward</label>
+                    <input type="number" id="taskPoints" required min="1" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="e.g. 50">
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" id="saveTaskBtn" class="w-full bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 transition">Save Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+  </div>
+
+  <script type="module" src="./assets/hr.js"></script>
+</body>
+</html>

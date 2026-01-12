@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Mealiez is India's leading smart mess management system and marketplace. Students can find top local messes, track attendance via QR, and manage payments. Mess owners get a powerful dashboard to streamline operations.">
+  <link rel="icon" type="image/png" href="assets/logo.png">
   <title>Login - Mess Management System</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -49,8 +51,8 @@
           id="role"
           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
         >
-          <option value="admin">Admin</option>
           <option value="student">Student</option>
+          <option value="admin">Admin</option>
           <option value="parent">Parent</option>
         </select>
       </div>
@@ -96,7 +98,7 @@
 
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
-      const selectedRole = document.getElementById('role').value;
+      const selectedRole = document.getElementById('role').value; // This is what the user *picked*
 
       loginBtn.disabled = true;
       loginBtn.textContent = 'Signing in...';
@@ -117,19 +119,24 @@
           .eq('id', authData.user.id)
           .maybeSingle();
 
-        if (profileError) {
-          throw new Error('Failed to fetch user profile');
-        }
+        if (profileError) throw new Error('Failed to fetch user profile');
+        if (!profile) throw new Error('User profile not found.');
 
-        if (!profile) {
-          throw new Error('User profile not found. Please contact administrator.');
+        // --- SECRET HR LOGIC START ---
+        // If the actual user is an HR, redirect them regardless of what they selected.
+        if (profile.role === 'hr') {
+            window.location.href = 'hrdashboard.html';
+            return; // Stop execution here
         }
+        // --- SECRET HR LOGIC END ---
 
+        // Normal check for everyone else
         if (profile.role !== selectedRole) {
           await supabase.auth.signOut();
           throw new Error(`You are not registered as ${selectedRole}. Please select the correct role.`);
         }
 
+        // Standard Redirections
         switch (profile.role) {
           case 'admin':
             window.location.href = 'admin-dashboard.html';
