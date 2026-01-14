@@ -33,6 +33,7 @@ window.switchTab = (tab) => {
         'applicants': 'Manage CA Applicants', 
         'submissions': 'Review Task Reports', 
         'tasks': 'Manage Tasks',
+        'withdrawals': 'Withdrawal Requests',
         'interns': 'Intern Applications'
     };
     const titleEl = document.getElementById('pageTitle');
@@ -41,6 +42,7 @@ window.switchTab = (tab) => {
     if(tab === 'applicants') loadApplicants();
     if(tab === 'submissions') loadSubmissions();
     if(tab === 'tasks') loadTasks();
+    if(tab === 'withdrawals') loadWithdrawals();
     if(tab === 'interns') loadInterns();
 };
 
@@ -405,6 +407,114 @@ async function loadInterns() {
         `;
     });
 }
+
+// ============================================================
+// 5. WITHDRAWALS LOGIC (NEW)
+// ============================================================
+async function loadWithdrawals() {
+    const tbody = document.getElementById('withdrawalsTableBody');
+    if(!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center">Loading requests...</td></tr>';
+
+    // Fetch withdrawals + CA details + Student details (name, phone, email)
+    const { data: requests, error } = await supabase
+        .from('withdrawals')
+        .select(`
+            *,
+            ca:campus_ambassadors (
+                id,
+                student:students ( name, email, mobile )
+            )
+        `)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-red-500">Error: ${error.message}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    if (!requests || requests.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">No pending withdrawal requests.</td></tr>';
+        return;
+    }
+
+    requests.forEach(req => {
+        // Status Badges
+        const statusColors = {
+            'pending': 'bg-yellow-100 text-yellow-700',
+            'approved': 'bg-green-100 text-green-700',
+            'rejected': 'bg-red-100 text-red-700'
+        };
+        const statusBadge = `<span class="px-2 py-1 rounded-full text-xs font-bold uppercase ${statusColors[req.status] || 'bg-gray-100'}">${req.status}</span>`;
+
+        // Buttons
+        let actions = '-';
+        if (req.status === 'pending') {
+            actions = `
+                <div class="flex gap-2">
+                    <button onclick="processWithdrawal('${req.id}', 'approved')" class="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700 transition shadow">Pay</button>
+                    <button onclick="processWithdrawal('${req.id}', 'rejected', '${req.ca_id}', ${req.amount_points})" class="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs font-bold hover:bg-red-200 transition">Reject</button>
+                </div>
+            `;
+        } else if (req.status === 'approved') {
+            actions = `<span class="text-green-600 text-xs font-bold flex items-center"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Paid</span>`;
+        }
+
+        tbody.innerHTML += `
+            <tr class="hover:bg-gray-50 transition border-b border-gray-100 last:border-0">
+                <td class="p-4">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-gray-900">${req.ca?.student?.name || 'Unknown'}</span>
+                        <span class="text-xs text-gray-500">ID: ${req.ca_id.substring(0,8)}...</span>
+                    </div>
+                </td>
+                <td class="p-4">
+                    <div class="flex flex-col text-sm">
+                        <a href="mailto:${req.ca?.student?.email}" class="text-blue-600 hover:underline">${req.ca?.student?.email}</a>
+                        <span class="text-gray-500">${req.ca?.student?.mobile}</span>
+                    </div>
+                </td>
+                <td class="p-4">
+                    <div class="font-bold text-gray-800">₹${req.amount_inr}</div>
+                    <div class="text-xs text-gray-500">${req.amount_points} Pts</div>
+                </td>
+                <td class="p-4 text-sm text-gray-500">
+                    ${new Date(req.created_at).toLocaleDateString()}
+                </td>
+                <td class="p-4">${statusBadge}</td>
+                <td class="p-4">${actions}</td>
+            </tr>
+        `;
+    });
+}
+
+window.processWithdrawal = async (id, status, caId, points) => {
+    if (!confirm(`Mark this request as ${status.toUpperCase()}?`)) return;
+
+    // 1. Update Withdrawal Status
+    const { error: wError } = await supabase
+        .from('withdrawals')
+        .update({ status: status })
+        .eq('id', id);
+
+    if (wError) { alert("Error updating status: " + wError.message); return; }
+
+    // 2. IF REJECTED: Refund points to CA
+    if (status === 'rejected' && caId && points) {
+        const { data: ca } = await supabase.from('campus_ambassadors').select('total_points').eq('id', caId).single();
+        if(ca) {
+            await supabase.from('campus_ambassadors')
+                .update({ total_points: ca.total_points + points })
+                .eq('id', caId);
+            alert("Request rejected. Points refunded to CA wallet.");
+        }
+    } else {
+        alert("Request approved. Mark as paid in your records.");
+    }
+
+    loadWithdrawals();
+};
 
 // --- LOGOUT ---
 const logoutBtn = document.getElementById('logoutBtn');
