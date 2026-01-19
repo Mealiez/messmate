@@ -405,16 +405,15 @@ async function handleSubmitReview(e) {
   msgEl.className = 'text-sm text-gray-500';
 
   const { error } = await supabase
-    .from('reviews')
-    .upsert(
-      {
-        student_id: currentStudent.id,
-        mess_id: currentStudent.mess_id,
-        rating: rating,
-        review_text: reviewText
-      },
-      { onConflict: 'student_id' }
-    );
+  .from('reviews')
+  .upsert(
+    {
+      student_id: currentStudent.id,
+      mess_id: currentStudent.mess_id,
+      rating: rating,
+      review_text: reviewText
+    }
+  );
   
   if (error) {
     msgEl.textContent = 'Error: ' + error.message;
