@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# Get current branch
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+# 1. BLOCK MAIN (Only You can push, but even you should use PRs)
+if [ "$branch" = "main" ]; then
+  echo "🔴 STOP! You cannot push directly to MAIN."
+  exit 1
+fi
+
+# 2. BLOCK DEVELOPMENT (Interns must use PRs)
+if [ "$branch" = "development" ]; then
+  echo "🟡 STOP! You cannot push directly to DEVELOPMENT."
+  echo "👉 Please create a 'feature/...' branch and make a Pull Request."
+  exit 1
+fi
