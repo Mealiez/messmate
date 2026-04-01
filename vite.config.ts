@@ -4,25 +4,21 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  // Tell Vite the source code is in the 'public' folder
-  root: 'public',
-  // Tell Vite to output the build to the 'dist' folder in the project root
   build: {
-    outDir: '../dist',
+    outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        // List all your pages here so Vite knows about them
-        main: resolve(__dirname, 'public/index.html'),
-        login: resolve(__dirname, 'public/login.html'),
-        register: resolve(__dirname, 'public/register.html'),
-        student_dashboard: resolve(__dirname, 'public/student-dashboard.html'),
-        parent_dashboard: resolve(__dirname, 'public/parent-dashboard.html'),
-        admin_dashboard: resolve(__dirname, 'public/admin-dashboard.html'),
-        hr_dashboard: resolve(__dirname, 'public/hrdashboard.html'),
-        campus_ambassador: resolve(__dirname, 'public/campusambassador.html'),
-        internship: resolve(__dirname, 'public/internship.html'),
-        report: resolve(__dirname, 'public/report.html'),
+        main: resolve(__dirname, 'index.html'),
+        login: resolve(__dirname, 'login.html'),
+        register: resolve(__dirname, 'register.html'),
+        student_dashboard: resolve(__dirname, 'student-dashboard.html'),
+        admin_dashboard: resolve(__dirname, 'admin-dashboard.html'),
+        parent_dashboard: resolve(__dirname, 'parent-dashboard.html'),
+        hrdashboard: resolve(__dirname, 'hrdashboard.html'),
+        campusambassador: resolve(__dirname, 'campusambassador.html'),
+        internship: resolve(__dirname, 'internship.html'),
+        report: resolve(__dirname, 'report.html'),
       },
     },
   },

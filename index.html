@@ -1,14 +1,22 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="refresh" content="0; url=/public/index.html" />
-    <title>Redirecting...</title>
+    <meta name="description" content="Mealiez is India's leading smart mess management system and marketplace. Students can find top local messes, track attendance via QR, and manage payments.">
+    <link rel="icon" type="image/png" href="/assets/logo.png" />
+    <title>Mealiez - Smart Mess Management System</title>
   </head>
-  <body>
+  <body class="font-sans antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/entries/main.tsx"></script>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-MVL6Q7HZDX"></script>
     <script>
-      window.location.href = '/public/index.html';
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-MVL6Q7HZDX');
     </script>
   </body>
 </html>
