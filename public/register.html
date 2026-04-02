@@ -145,13 +145,37 @@
     const adminPlanDiv = document.createElement('div');
     adminPlanDiv.className = 'hidden mb-4';
     adminPlanDiv.innerHTML = `
-        <label class="block text-gray-700 font-semibold mb-2">Choose Admin Plan</label>
+        <label class="block text-gray-700 font-semibold mb-2">Choose Subscription Plan</label>
         <select id="adminPlan" class="w-full px-4 py-3 border border-gray-300 rounded-lg">
-            <option value="free">Free (List Mess Only)</option>
-            <option value="starter">Starter (Manage Students & Attendance)</option>
-            <option value="pro">Pro (Full Access + Reports)</option>
-        </select>`;
+            <option value="">Loading plans...</option>
+        </select>
+        <div id="planDescription" class="mt-2 text-sm text-gray-500 italic hidden"></div>
+        <div id="customPlanNote" class="hidden mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p class="text-blue-700 text-sm font-semibold">📞 Custom Plan Selected</p>
+            <p class="text-blue-600 text-xs mt-1">After registering, our HR team will contact you to discuss features & pricing. Your dashboard activates after payment.</p>
+        </div>`;
     licenseKeyField.parentNode.insertBefore(adminPlanDiv, licenseKeyField.nextSibling);
+
+    // Load plans dynamically from DB
+    async function loadAdminPlans() {
+        const select = document.getElementById('adminPlan');
+        const { data: plans, error } = await supabase.from('subscription_plans').select('name, description, price_monthly').order('price_monthly', { ascending: true, nullsFirst: false });
+        if (error || !plans) { select.innerHTML = '<option value="free">Free</option><option value="starter">Starter</option><option value="pro">Pro</option><option value="custom">Custom (Contact Us)</option>'; return; }
+        select.innerHTML = '';
+        plans.forEach(p => {
+            const priceLabel = p.price_monthly === null ? 'Custom Pricing' : (p.price_monthly === 0 ? 'Free' : `₹${p.price_monthly}/mo`);
+            select.innerHTML += `<option value="${p.name}" data-desc="${p.description || ''}">${p.name.charAt(0).toUpperCase() + p.name.slice(1)} – ${priceLabel}</option>`;
+        });
+        select.dispatchEvent(new Event('change'));
+    }
+
+    document.getElementById('adminPlan') && document.getElementById('adminPlan').addEventListener('change', (e) => {
+        const opt = e.target.selectedOptions[0];
+        const desc = document.getElementById('planDescription');
+        const customNote = document.getElementById('customPlanNote');
+        if (opt && opt.dataset.desc) { desc.textContent = opt.dataset.desc; desc.classList.remove('hidden'); } else { desc.classList.add('hidden'); }
+        if (e.target.value === 'custom') { customNote.classList.remove('hidden'); } else { customNote.classList.add('hidden'); }
+    });
     
     // --- VARIABLES TO HOLD TEMP DATA ---
     let pendingUserData = {};
@@ -183,6 +207,7 @@
             licenseKeyField.classList.remove('hidden');
             adminPlanDiv.classList.remove('hidden');
             license.required = true;
+            loadAdminPlans();
         }
     });
     roleSelect.dispatchEvent(new Event('change'));
@@ -304,19 +329,67 @@
         }
     });
 
+    function slugify(text) {
+        return text.toString().toLowerCase()
+            .replace(/\s+/g, '-')           // Replace spaces with -
+            .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
+            .replace(/\-\-+/g, '-')         // Replace multiple - with single -
+            .replace(/^-+/, '')             // Trim - from start
+            .replace(/-+$/, '');            // Trim - from end
+    }
+
     // --- PHASE 4: INSERT DATA & REDIRECT ---
     async function createDatabaseRecords(userId) {
         try {
-            // A. Create User Profile
+            const isCustomPlan = pendingUserData.adminPlan === 'custom';
+            const paymentStatus = (pendingUserData.role === 'admin' && isCustomPlan) ? 'pending' : 'paid';
+
+            let tenantId = null;
+
+            // A. Handle Tenant Logic
+            if (pendingUserData.role === 'admin') {
+                // Create a new Mess (Tenant) for the Admin
+                const messName = `${pendingUserData.name}'s Mess`;
+                const { data: tenant, error: tenantError } = await supabase.from('tenants').insert({
+                    name: messName,
+                    slug: `${slugify(pendingUserData.name)}-${Date.now().toString().slice(-4)}`,
+                    plan: pendingUserData.adminPlan || 'free'
+                }).select('id').single();
+
+                if (tenantError) throw new Error("Failed to create Mess account: " + tenantError.message);
+                tenantId = tenant.id;
+            } else if (pendingUserData.role === 'student' || pendingUserData.role === 'parent') {
+                // Join existing Mess (Tenant) by resolving Mess ID (Admin UUID) to Tenant ID
+                if (pendingUserData.messId) {
+                    const { data: adminProf, error: adminErr } = await supabase
+                        .from('user_profiles')
+                        .select('tenant_id')
+                        .eq('id', pendingUserData.messId)
+                        .single();
+                    
+                    if (adminErr || !adminProf?.tenant_id) {
+                        throw new Error("Invalid Mess ID. Please verify with your Mess Admin.");
+                    }
+                    tenantId = adminProf.tenant_id;
+                }
+            }
+
+            if (!tenantId && pendingUserData.role !== 'hr') {
+                throw new Error("Mess ID (Tenant) is required for registration.");
+            }
+
+            // B. Create User Profile
             const { error: profileError } = await supabase.from('user_profiles').insert({ 
                 id: userId, 
                 role: pendingUserData.role, 
                 full_name: pendingUserData.name,
-                subscription_plan: pendingUserData.adminPlan 
+                subscription_plan: pendingUserData.adminPlan || 'free',
+                payment_status: paymentStatus,
+                tenant_id: tenantId
             });
             if (profileError) throw profileError;
 
-            // B. Create Student Record (If Student)
+            // C. Create Student Record (If Student)
             if (pendingUserData.role === 'student') {
                 const { error: studentError } = await supabase.from('students').insert({
                     user_id: userId, 
@@ -327,21 +400,28 @@
                     room_no: pendingUserData.roomNo, 
                     status: 'Active', 
                     mess_id: pendingUserData.messId, 
-                    college: pendingUserData.college
+                    college: pendingUserData.college,
+                    tenant_id: tenantId
                 });
                 if (studentError) throw studentError;
             }
 
-            // C. Redirect
-            alert("Verification Successful! Logging in...");
-            if (pendingUserData.role === 'student') window.location.href = 'student-dashboard.html';
-            else if (pendingUserData.role === 'admin') window.location.href = 'admin-dashboard.html';
-            else window.location.href = 'parent-dashboard.html';
-
+            // D. Smart redirect based on plan & role
+            if (pendingUserData.role === 'admin') {
+                if (isCustomPlan) {
+                    window.location.href = 'contact.html';
+                } else {
+                    alert("Registration Successful! Your Mess has been created.");
+                    window.location.href = 'admin-dashboard.html';
+                }
+            } else if (pendingUserData.role === 'student') {
+                alert("Verification Successful! Logging in...");
+                window.location.href = 'student-dashboard.html';
+            } else {
+                window.location.href = 'parent-dashboard.html';
+            }
         } catch (error) {
             console.error("DB Insert Error", error);
-            // Even if DB insert fails, Auth succeeded. 
-            // In production, you might want to rollback or handle this better.
             alert("Account created, but profile setup failed: " + error.message);
             window.location.href = 'index.html';
         }

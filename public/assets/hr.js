@@ -6,7 +6,7 @@ async function checkAuth() {
     if (!user) { window.location.href = 'login.html'; return; }
     
     // Check Role via RPC function to avoid recursion
-    const { data: isAuthorized, error } = await supabase.rpc('is_hr_or_admin');
+    const { data: isAuthorized, error } = await supabase.rpc('is_super_admin');
     
     if (error || !isAuthorized) {
         alert("Unauthorized access.");
@@ -34,7 +34,9 @@ window.switchTab = (tab) => {
         'submissions': 'Review Task Reports', 
         'tasks': 'Manage Tasks',
         'withdrawals': 'Withdrawal Requests',
-        'interns': 'Intern Applications'
+        'interns': 'Intern Applications',
+        'tenants': 'Tenant Config',
+        'planMgmt': 'Plan Management'
     };
     const titleEl = document.getElementById('pageTitle');
     if(titleEl) titleEl.textContent = titles[tab] || 'Dashboard';
@@ -44,6 +46,8 @@ window.switchTab = (tab) => {
     if(tab === 'tasks') loadTasks();
     if(tab === 'withdrawals') loadWithdrawals();
     if(tab === 'interns') loadInterns();
+    if(tab === 'tenants') loadTenants();
+    if(tab === 'planMgmt') loadPlanManagement();
 };
 
 // ============================================================
@@ -516,16 +520,297 @@ window.processWithdrawal = async (id, status, caId, points) => {
     loadWithdrawals();
 };
 
-// --- LOGOUT ---
+// ============================================================
+// 6. TENANT CONFIG — Plan-Based Assignment & Payment Gate
+// ============================================================
+let _currentTenantId = null;
+let _currentPaymentStatus = 'pending';
+
+window.loadTenants = async () => {
+    const list = document.getElementById('tenantsList');
+    if (!list) return;
+    list.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-400">Loading tenants...</td></tr>';
+
+    const [tenantsRes, profilesRes] = await Promise.all([
+        supabase.from('tenants').select('*').order('name'),
+        supabase.from('user_profiles').select('id, tenant_id, subscription_plan, payment_status').eq('role', 'admin')
+    ]);
+
+    if (tenantsRes.error) {
+        list.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-red-500">Error: ${tenantsRes.error.message}</td></tr>`;
+        return;
+    }
+
+    // Build a lookup: tenant_id → profile
+    const profileMap = {};
+    (profilesRes.data || []).forEach(p => { if (p.tenant_id) profileMap[p.tenant_id] = p; });
+
+    list.innerHTML = '';
+    const tenants = tenantsRes.data || [];
+    if (tenants.length === 0) {
+        list.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-400">No tenants registered yet.</td></tr>';
+        return;
+    }
+
+    tenants.forEach(t => {
+        const profile = profileMap[t.id] || {};
+        const plan = profile.subscription_plan || 'free';
+        const payStatus = profile.payment_status || 'unpaid';
+        const payBadge = payStatus === 'paid'
+            ? '<span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-bold">Paid ✓</span>'
+            : '<span class="bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full font-bold">Pending</span>';
+
+        list.innerHTML += `
+            <tr class="hover:bg-gray-50">
+                <td class="p-4">
+                    <p class="font-bold text-gray-800">${t.name}</p>
+                    <p class="text-xs text-gray-400 font-mono">${t.id.substring(0,8)}...</p>
+                </td>
+                <td class="p-4">
+                    <span class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-semibold uppercase">${plan}</span>
+                </td>
+                <td class="p-4">${payBadge}</td>
+                <td class="p-4 text-center">
+                    <button onclick="openTenantModal('${t.id}', '${t.name.replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded text-sm font-semibold transition">Configure</button>
+                </td>
+            </tr>`;
+    });
+};
+
+window.openTenantModal = async (tenantId, tenantName) => {
+    _currentTenantId = tenantId;
+    document.getElementById('tenantModalTitle').textContent = `Configure: ${tenantName}`;
+    document.getElementById('tenantModal').classList.remove('hidden');
+
+    // Load plans into selector
+    const planSel = document.getElementById('tenantPlanSelect');
+    planSel.innerHTML = '<option value="">Loading...</option>';
+    const { data: plans } = await supabase.from('subscription_plans').select('name, description').order('name');
+    planSel.innerHTML = '';
+    (plans || []).forEach(p => {
+        planSel.innerHTML += `<option value="${p.name}">${p.name} — ${p.description || ''}</option>`;
+    });
+
+    // Load existing profile data
+    const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('subscription_plan, payment_status')
+        .eq('tenant_id', tenantId)
+        .maybeSingle();
+
+    if (profile) {
+        planSel.value = profile.subscription_plan || 'free';
+        _currentPaymentStatus = profile.payment_status || 'unpaid';
+    } else {
+        _currentPaymentStatus = 'unpaid';
+    }
+
+    updatePaymentToggleUI();
+    planSel.dispatchEvent(new Event('change'));
+};
+
+// Live feature preview when plan changes
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('tenantPlanSelect') && document.getElementById('tenantPlanSelect').addEventListener('change', async (e) => {
+        const planName = e.target.value;
+        const preview = document.getElementById('planFeaturePreview');
+        if (!planName) { preview.innerHTML = '<p class="text-gray-400 italic">Select a plan to preview features.</p>'; return; }
+        preview.innerHTML = '<p class="text-gray-400 text-xs animate-pulse">Loading features...</p>';
+        const { data: pf } = await supabase.from('plan_features').select('feature_id').eq('plan_name', planName);
+        if (!pf || pf.length === 0) {
+            preview.innerHTML = '<p class="text-gray-400 italic text-sm">No features configured for this plan.</p>';
+        } else {
+            preview.innerHTML = pf.map(f =>
+                `<div class="flex items-center gap-2"><span class="w-2 h-2 bg-green-500 rounded-full"></span><span>${f.feature_id.replace(/_/g,' ').replace(/\b\w/g,(c)=>c.toUpperCase())}</span></div>`
+            ).join('');
+        }
+    });
+});
+
+function updatePaymentToggleUI() {
+    const isPaid = _currentPaymentStatus === 'paid';
+    const btn = document.getElementById('paymentToggleBtn');
+    const knob = document.getElementById('paymentToggleKnob');
+    const label = document.getElementById('paymentStatusLabel');
+    if (!btn) return;
+    btn.className = `relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none ${isPaid ? 'bg-green-500' : 'bg-gray-300'}`;
+    knob.className = `inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${isPaid ? 'translate-x-6' : 'translate-x-1'}`;
+    label.textContent = isPaid ? 'PAID' : 'PENDING';
+    label.className = `text-xs font-bold ${isPaid ? 'text-green-600' : 'text-yellow-600'}`;
+}
+
+window.togglePaymentStatus = () => {
+    _currentPaymentStatus = _currentPaymentStatus === 'paid' ? 'unpaid' : 'paid';
+    updatePaymentToggleUI();
+};
+
+window.saveTenantConfig = async () => {
+    if (!_currentTenantId) return;
+    const plan = document.getElementById('tenantPlanSelect').value;
+    if (!plan) return alert('Please select a plan.');
+
+    const { error } = await supabase.from('user_profiles').update({
+        subscription_plan: plan,
+        payment_status: _currentPaymentStatus
+    }).eq('tenant_id', _currentTenantId);
+
+    if (error) { alert('Error saving: ' + error.message); return; }
+    closeTenantModal();
+    const statusMsg = _currentPaymentStatus === 'paid' ? 'Dashboard is now LIVE for this mess! ✅' : 'Plan assigned. Dashboard pending payment.';
+    alert(statusMsg);
+};
+
+window.closeTenantModal = () => {
+    document.getElementById('tenantModal').classList.add('hidden');
+    _currentTenantId = null;
+    loadTenants();
+};
+
+// ============================================================
+// 7. PLAN MANAGEMENT — Create & Configure Plans (incl. customv1)
+// ============================================================
+window.loadPlanManagement = async () => {
+    const container = document.getElementById('plansList');
+    if (!container) return;
+    container.innerHTML = '<p class="text-gray-400 text-center py-8">Loading plans...</p>';
+
+    const [plansRes, planFeaturesRes, allFeaturesRes] = await Promise.all([
+        supabase.from('subscription_plans').select('*').order('price_monthly', { ascending: true, nullsFirst: false }),
+        supabase.from('plan_features').select('*'),
+        supabase.from('features').select('*')
+    ]);
+
+    if (plansRes.error) {
+        container.innerHTML = `<p class="text-red-500">Error: ${plansRes.error.message}</p>`; return;
+    }
+
+    const plans = plansRes.data || [];
+    if (plans.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-12 border-2 border-dashed border-gray-100 rounded-xl">
+                <p class="text-gray-400">No custom plans found. Seed the database or create one!</p>
+            </div>`;
+        return;
+    }
+
+    const planFeatureMap = {};
+    (planFeaturesRes.data || []).forEach(pf => {
+        if (!planFeatureMap[pf.plan_name]) planFeatureMap[pf.plan_name] = [];
+        planFeatureMap[pf.plan_name].push(pf.feature_id);
+    });
+
+    container.innerHTML = '';
+    plans.forEach(plan => {
+        const features = planFeatureMap[plan.name] || [];
+        const isCustomType = !['free','starter','pro'].includes(plan.name);
+        const featureBadges = features.map(f =>
+            `<span class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">${f.replace(/_/g,' ')}</span>`
+        ).join(' ') || '<span class="text-gray-400 text-xs italic">No features</span>';
+
+        container.innerHTML += `
+            <div class="border rounded-xl p-5 hover:border-blue-300 transition ${isCustomType ? 'border-purple-200 bg-purple-50' : 'border-gray-200 bg-white'}">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-gray-800 text-base">${plan.name}</span>
+                            ${isCustomType ? '<span class="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full font-semibold">Custom</span>' : ''}
+                        </div>
+                        <p class="text-sm text-gray-500 mt-0.5">${plan.description || '—'}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-bold text-gray-800">${plan.price_monthly === null ? 'Custom Price' : (plan.price_monthly === 0 ? 'Free' : '₹'+plan.price_monthly+'/mo')}</p>
+                        <button onclick="openEditPlanModal('${plan.name}')" class="text-xs text-blue-600 hover:underline mt-1">Edit Features</button>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-1">${featureBadges}</div>
+            </div>`;
+    });
+};
+
+window.openNewPlanModal = async () => {
+    document.getElementById('newPlanName').value = '';
+    document.getElementById('newPlanName').readOnly = false;
+    document.getElementById('newPlanDesc').value = '';
+    document.getElementById('newPlanPrice').value = '';
+    await loadFeatureCheckboxes('newPlanFeatureList', []);
+    document.getElementById('newPlanModal').classList.remove('hidden');
+};
+
+window.openEditPlanModal = async (planName) => {
+    document.getElementById('newPlanName').value = planName;
+    document.getElementById('newPlanName').readOnly = true;
+    const { data: plan } = await supabase.from('subscription_plans').select('*').eq('name', planName).maybeSingle();
+    document.getElementById('newPlanDesc').value = plan?.description || '';
+    document.getElementById('newPlanPrice').value = plan?.price_monthly || '';
+    const { data: pf } = await supabase.from('plan_features').select('feature_id').eq('plan_name', planName);
+    const enabled = (pf || []).map(f => f.feature_id);
+    await loadFeatureCheckboxes('newPlanFeatureList', enabled);
+    document.getElementById('newPlanModal').classList.remove('hidden');
+};
+
+async function loadFeatureCheckboxes(containerId, enabledList) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '<p class="text-xs text-gray-400">Loading...</p>';
+    const { data: features } = await supabase.from('features').select('*');
+    container.innerHTML = '';
+    (features || []).forEach(f => {
+        const checked = enabledList.includes(f.id) ? 'checked' : '';
+        container.innerHTML += `
+            <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" value="${f.id}" ${checked} class="plan-feature-checkbox w-4 h-4 accent-purple-600">
+                <div>
+                    <span class="text-sm font-medium text-gray-700">${f.name}</span>
+                    <p class="text-xs text-gray-400">${f.description || ''}</p>
+                </div>
+            </label>`;
+    });
+}
+
+window.closeNewPlanModal = () => {
+    document.getElementById('newPlanModal').classList.add('hidden');
+    document.getElementById('newPlanName').readOnly = false;
+};
+
+window.saveNewPlan = async () => {
+    const name = document.getElementById('newPlanName').value.trim().toLowerCase().replace(/\s+/g,'');
+    const desc = document.getElementById('newPlanDesc').value.trim();
+    const price = parseFloat(document.getElementById('newPlanPrice').value) || null;
+
+    if (!name) return alert('Plan name is required.');
+
+    // Upsert the plan
+    const { error: planErr } = await supabase.from('subscription_plans').upsert(
+        { name, description: desc, price_monthly: price, updated_at: new Date().toISOString() },
+        { onConflict: 'name' }
+    );
+    if (planErr) { alert('Error saving plan: ' + planErr.message); return; }
+
+    // Get selected feature IDs
+    const checked = [...document.querySelectorAll('.plan-feature-checkbox:checked')].map(cb => cb.value);
+
+    // Delete old features for this plan, then insert new ones
+    await supabase.from('plan_features').delete().eq('plan_name', name);
+    if (checked.length > 0) {
+        const inserts = checked.map(fId => ({ plan_name: name, feature_id: fId }));
+        const { error: featureErr } = await supabase.from('plan_features').insert(inserts);
+        if (featureErr) { alert('Plan saved but features error: ' + featureErr.message); }
+    }
+
+    closeNewPlanModal();
+    alert(`Plan "${name}" saved successfully!`);
+    loadPlanManagement();
+};
+
+// ── Logout ──────────────────────────────────────────────────────────
 const logoutBtn = document.getElementById('logoutBtn');
-if(logoutBtn) {
+if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
         await supabase.auth.signOut();
         window.location.href = 'login.html';
     });
 }
 
-// Init
+// ── Init ─────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth().then(() => switchTab('applicants'));
-});
+});

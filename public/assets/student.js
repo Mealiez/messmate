@@ -134,6 +134,76 @@ async function loadAttendanceStats() {
   }
 }
 
+// --- NEW: FEATURE GATING ---
+async function applyPlanFeatures() {
+    if (!currentStudent || !currentStudent.tenant_id) return;
+
+    try {
+        const { data: features, error } = await supabase
+            .from('tenant_features')
+            .select('feature_id, enabled')
+            .eq('tenant_id', currentStudent.tenant_id);
+
+        if (error) throw error;
+
+        const enabledFeatures = new Set(features.filter(f => f.enabled).map(f => f.feature_id));
+
+        // Show/Hide Meal Request Section
+        const mealReqSection = document.getElementById('mealRequestSection');
+        const quickMealReqBtn = document.getElementById('quickMealReqBtn');
+        if (mealReqSection) {
+            if (enabledFeatures.has('meal_requests')) {
+                mealReqSection.classList.remove('hidden');
+                if (quickMealReqBtn) quickMealReqBtn.classList.remove('hidden');
+                updateAutoMealStatus(); // Initialize Auto tab
+                loadMealRequests();
+            } else {
+                mealReqSection.classList.add('hidden');
+                if (quickMealReqBtn) quickMealReqBtn.classList.add('hidden');
+            }
+        }
+    } catch (err) {
+        console.error("Error applying plan features:", err);
+    }
+}
+
+async function loadMealRequests() {
+    if (!currentStudent) return;
+    
+    const { data: requests, error } = await supabase
+        .from('meal_requests')
+        .select('*')
+        .eq('student_id', currentStudent.id)
+        .order('date', { ascending: false })
+        .limit(10);
+
+    const historyContainer = document.getElementById('mealRequestHistory');
+    if (!historyContainer) return;
+
+    if (error || !requests || requests.length === 0) {
+        historyContainer.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500 italic">No requests found.</td></tr>`;
+        return;
+    }
+
+    historyContainer.innerHTML = requests.map(req => {
+        let statusClass = 'bg-blue-100 text-blue-800';
+        if (req.status === 'Fulfilled') statusClass = 'bg-green-100 text-green-800';
+        if (req.status === 'Cancelled') statusClass = 'bg-red-100 text-red-800';
+
+        return `
+            <tr>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${new Date(req.date).toLocaleDateString()}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${req.meal_type}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">
+                        ${req.status}
+                    </span>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
 async function loadPaymentInfo() {
   // SAFETY CHECK: Stop if no mess
   if (!currentStudent || !currentStudent.mess_id) return;
@@ -269,6 +339,85 @@ async function loadTodayMenu() {
   if(b) b.textContent = menu ? (menu.breakfast || 'Not available') : 'Not available';
   if(l) l.textContent = menu ? (menu.lunch || 'Not available') : 'Not available';
   if(d) d.textContent = menu ? (menu.dinner || 'Not available') : 'Not available';
+}
+
+function getUpcomingMeal() {
+    const hour = new Date().getHours();
+    if (hour < 10) return { name: 'Breakfast', type: 'Breakfast' };
+    if (hour < 15) return { name: 'Lunch', type: 'Lunch' };
+    if (hour < 22) return { name: 'Dinner', type: 'Dinner' };
+    return null; // Past 10 PM
+}
+
+function updateAutoMealStatus() {
+  const meal = getUpcomingMeal();
+  const title = document.getElementById('detectedMealTitle');
+  const btn = document.getElementById('autoMealReqBtn');
+  const nameEl = document.getElementById('autoMealName');
+
+  if (!title || !btn || !nameEl) return;
+
+  if (meal) {
+    title.textContent = `Upcoming Meal: ${meal.name}`;
+    nameEl.textContent = meal.name;
+    btn.disabled = false;
+  } else {
+    title.textContent = "No More Meals for Today";
+    nameEl.textContent = "N/A";
+    btn.disabled = true;
+    document.getElementById('detectedMealSubtitle').textContent = "Please use 'Specific Request' for tomorrow or check back in the morning.";
+  }
+}
+
+async function handleAutoMealRequest() {
+    const meal = getUpcomingMeal();
+    if (!meal) return;
+
+    const btn = document.getElementById('autoMealReqBtn');
+    const msg = document.getElementById('autoReqMessage');
+    const date = new Date().toISOString().split('T')[0];
+
+    if (!currentStudent || !currentStudent.tenant_id) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+    msg.textContent = '';
+
+    try {
+        // Check for duplicate
+        const { data: existing } = await supabase
+            .from('meal_requests')
+            .select('id')
+            .eq('student_id', currentStudent.id)
+            .eq('date', date)
+            .eq('meal_type', meal.type)
+            .maybeSingle();
+
+        if (existing) {
+            throw new Error(`You already have a request for ${meal.name} today.`);
+        }
+
+        const { error } = await supabase
+            .from('meal_requests')
+            .insert({
+                student_id: currentStudent.id,
+                tenant_id: currentStudent.tenant_id,
+                date: date,
+                meal_type: meal.type,
+                status: 'Requested'
+            });
+
+        if (error) throw error;
+
+        msg.textContent = `Success! ${meal.name} requested.`;
+        msg.className = 'mt-4 text-sm text-green-600 font-semibold';
+        loadMealRequests();
+    } catch (err) {
+        msg.textContent = err.message;
+        msg.className = 'mt-4 text-sm text-red-600 font-semibold';
+    } finally {
+        updateAutoMealStatus(); // Reset button text
+    }
 }
 
 function getMealTypeByTime() {
@@ -557,6 +706,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadTodayMenu();
         await checkTodayAttendance();
         await loadPlanDaysRemaining();
+        await applyPlanFeatures();
         
         setupStarRating();
         await loadMyReview();
@@ -649,10 +799,23 @@ if(changeMessForm) {
         confirmBtn.textContent = "Joining...";
 
         try {
+            // 1. Resolve Tenant ID from Mess Admin ID
+            const { data: adminProfile, error: profileError } = await supabase
+                .from('user_profiles')
+                .select('tenant_id')
+                .eq('id', newMessId)
+                .single();
+
+            if (profileError || !adminProfile?.tenant_id) {
+                throw new Error("Invalid Mess ID. Could not find associated account.");
+            }
+
+            // 2. Update Student Record with both Mess ID and Tenant ID
             const { error } = await supabase
                 .from('students')
                 .update({
                     mess_id: newMessId,
+                    tenant_id: adminProfile.tenant_id,
                     plan_type: newPlan,
                     plan_start_date: new Date().toISOString(), 
                     status: 'Active', 
@@ -801,6 +964,85 @@ if (caForm) {
             btn.textContent = 'Submit Application';
         }
     });
+}
+
+// --- NEW: MEAL REQUEST HANDLER ---
+const mealRequestForm = document.getElementById('mealRequestForm');
+if (mealRequestForm) {
+    mealRequestForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const date = document.getElementById('requestDate').value;
+        const mealType = document.getElementById('requestMealType').value;
+        const submitBtn = document.getElementById('submitMealReqBtn');
+
+        if (!currentStudent || !currentStudent.tenant_id) return;
+
+        // Validation: Date cannot be in the past
+        const selectedDate = new Date(date);
+        selectedDate.setHours(0,0,0,0);
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
+        if (selectedDate < today) {
+            alert("Cannot request meals for past dates.");
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+
+        try {
+            const { error } = await supabase
+                .from('meal_requests')
+                .insert({
+                    student_id: currentStudent.id,
+                    tenant_id: currentStudent.tenant_id,
+                    date: date,
+                    meal_type: mealType,
+                    status: 'Requested'
+                });
+
+            if (error) throw error;
+
+            alert("Meal request submitted successfully!");
+            mealRequestForm.reset();
+            loadMealRequests();
+        } catch (err) {
+            console.error("Error submitting meal request:", err);
+            alert("Failed to submit request: " + err.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Manual Request';
+        }
+    });
+}
+
+// Tab Switching
+const tabAuto = document.getElementById('tabAuto');
+const tabManual = document.getElementById('tabManual');
+const autoDiv = document.getElementById('autoRequestDiv');
+const manualForm = document.getElementById('mealRequestForm');
+
+if (tabAuto && tabManual) {
+    tabAuto.addEventListener('click', () => {
+        tabAuto.className = 'py-2 px-6 font-bold text-green-600 border-b-2 border-green-600 transition';
+        tabManual.className = 'py-2 px-6 font-semibold text-gray-500 hover:text-green-600 transition';
+        autoDiv.classList.remove('hidden');
+        manualForm.classList.add('hidden');
+        updateAutoMealStatus();
+    });
+
+    tabManual.addEventListener('click', () => {
+        tabManual.className = 'py-2 px-6 font-bold text-green-600 border-b-2 border-green-600 transition';
+        tabAuto.className = 'py-2 px-6 font-semibold text-gray-500 hover:text-green-600 transition';
+        manualForm.classList.remove('hidden');
+        autoDiv.classList.add('hidden');
+    });
+}
+
+const autoReqBtn = document.getElementById('autoMealReqBtn');
+if (autoReqBtn) {
+    autoReqBtn.addEventListener('click', handleAutoMealRequest);
 }
 
 async function checkCaStatus() {
