@@ -15,6 +15,7 @@
 
   gtag('config', 'G-MVL6Q7HZDX');
 </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
   <header class="bg-white shadow-sm">
@@ -148,6 +149,15 @@
             <p class="text-gray-500 text-sm">Plan Days Remaining</p>
             <p class="text-3xl font-bold text-gray-800" id="daysRemaining">N/A</p>
           </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-lg p-8 mb-8">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold text-gray-800 mb-2">My Mess QR Code</h2>
+          <p class="text-gray-600 mb-6">Show this to the mess admin for quick attendance marking.</p>
+          <div id="qrcode" class="flex justify-center"></div>
+          <p id="qrMessage" class="mt-4 text-sm text-red-500"></p>
         </div>
       </div>
 

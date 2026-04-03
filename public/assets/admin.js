@@ -133,8 +133,7 @@ function formatMealName(meal) {
 async function onScanSuccess(decodedText, decodedResult) {
     const studentId = decodedText;
     const scanResultEl = document.getElementById('scanResult');
-    scanResultEl.textContent = 'Processing...';
-    scanResultEl.className = 'mt-4 text-center font-semibold text-lg text-gray-500';
+    scanResultEl.innerHTML = '<div class="text-gray-500 font-semibold text-lg">Processing...</div>';
 
     if (html5QrcodeScanner && html5QrcodeScanner.getState() === 2) {
         html5QrcodeScanner.pause();
@@ -147,13 +146,39 @@ async function onScanSuccess(decodedText, decodedResult) {
         const meal = getMealTypeByTime();
         if (!meal) throw new Error('No meal service is active at this time.');
 
-        const { data: student, error: studentError } = await supabase
+        // 1. Get Admin Profile for tenant_id (needed for mealiez lookup)
+        const { data: adminProfile } = await supabase
+            .from('user_profiles')
+            .select('tenant_id')
+            .eq('id', adminId)
+            .single();
+
+        // 2. Try Standard Students First
+        let { data: student, error: studentError } = await supabase
             .from('students')
-            .select('id, name')
+            .select('id, name, email, mobile')
             .eq('id', studentId)
             .eq('mess_id', adminId)
-            .single();
-        if (studentError) throw new Error('Student not found in this mess.');
+            .maybeSingle();
+
+        // 3. Fallback to Mealiez Students if not found
+        if (!student && adminProfile?.tenant_id) {
+            const { data: mealiez, error: mealiezError } = await supabase
+                .from('student_mealiez')
+                .select('id, name, email, mobile_number')
+                .eq('id', studentId)
+                .eq('tenant_id', adminProfile.tenant_id)
+                .maybeSingle();
+            
+            if (mealiez) {
+                student = {
+                    ...mealiez,
+                    mobile: mealiez.mobile_number
+                };
+            }
+        }
+
+        if (!student) throw new Error('Student not found or not enrolled in this mess.');
 
         const today = new Date().toISOString().split('T')[0];
         const { data: existingAttendance, error: attendanceError } = await supabase
@@ -162,6 +187,7 @@ async function onScanSuccess(decodedText, decodedResult) {
             .eq('student_id', studentId)
             .eq('date', today)
             .eq('meal', meal);
+        
         if (attendanceError) throw new Error('Error checking for duplicates.');
         if (existingAttendance && existingAttendance.length > 0) {
             throw new Error(`Attendance for ${student.name} (${meal}) is already marked.`);
@@ -172,15 +198,16 @@ async function onScanSuccess(decodedText, decodedResult) {
             meal: meal,
             status: 'PRESENT',
             date: today,
-            mess_id: adminId
+            mess_id: adminId,
+            tenant_id: adminProfile?.tenant_id
         });
 
         if (insertError) {
-            console.error("DETAILED SUPABASE ERROR:", insertError); // This will show the real error
-            throw new Error('Error saving attendance. Check console for details.');
+            console.error("DETAILED SUPABASE ERROR:", insertError);
+            throw new Error('Error saving attendance.');
         }
 
-        // --- NEW: AUTO-FULFILL MEAL REQUEST ---
+        // --- AUTO-FULFILL MEAL REQUEST ---
         try {
             await supabase
                 .from('meal_requests')
@@ -190,22 +217,38 @@ async function onScanSuccess(decodedText, decodedResult) {
                 .eq('meal_type', formatMealName(meal))
                 .eq('status', 'Requested');
         } catch (mealErr) {
-            console.warn("Auto-fulfillment of meal request failed (non-critical):", mealErr);
+            console.warn("Auto-fulfillment failed (non-critical):", mealErr);
         }
 
-        scanResultEl.textContent = `Success! Attendance marked for ${student.name}.`;
-        scanResultEl.className = 'mt-4 text-center font-semibold text-lg text-green-600';
+        // 4. DISPLAY RICH SUCCESS MESSAGE
+        scanResultEl.innerHTML = `
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 shadow-sm animate-pulse">
+                <div class="text-green-800 font-bold text-xl mb-1">
+                    Success! Marked for ${meal}
+                </div>
+                <div class="bg-white rounded p-3 flex flex-col items-center">
+                    <p class="text-gray-900 font-black text-2xl">${student.name}</p>
+                    <div class="flex gap-4 mt-2 text-sm text-gray-600">
+                        <p class="flex items-center"><svg class="w-4 h-4 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>${student.mobile || 'N/A'}</p>
+                        <p class="flex items-center"><svg class="w-4 h-4 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>${student.email || 'N/A'}</p>
+                    </div>
+                </div>
+            </div>
+        `;
 
     } catch (error) {
-        scanResultEl.textContent = `Error: ${error.message}`;
-        scanResultEl.className = 'mt-4 text-center font-semibold text-lg text-red-600';
+        scanResultEl.innerHTML = `
+            <div class="bg-red-50 border border-red-200 text-red-700 font-bold p-3 rounded-lg">
+                Error: ${error.message}
+            </div>
+        `;
     } finally {
         setTimeout(() => {
             if (html5QrcodeScanner && html5QrcodeScanner.getState() === 3) {
                 html5QrcodeScanner.resume();
-                scanResultEl.textContent = '';
+                scanResultEl.innerHTML = '';
             }
-        }, 2500);
+        }, 5000); // 5 seconds display for easier reading
     }
 }
 
@@ -1004,6 +1047,12 @@ async function markAbsenteesForPreviousMeal() {
     const today = new Date().toISOString().split('T')[0];
 
     try {
+        const { data: adminProfile } = await supabase
+            .from('user_profiles')
+            .select('tenant_id')
+            .eq('id', adminId)
+            .single();
+
         // 1. Get all active students for this mess
         const { data: students, error: studentError } = await supabase
             .from('students')
@@ -1037,6 +1086,7 @@ async function markAbsenteesForPreviousMeal() {
         const recordsToInsert = absentStudents.map(student => ({
             student_id: student.id,
             mess_id: adminId,
+            tenant_id: adminProfile?.tenant_id,
             date: today,
             meal: previousMeal,
             status: 'ABSENT', // Mark as ABSENT
@@ -1609,4 +1659,4 @@ window.updateMealRequestStatus = async function(requestId, newStatus) {
     } else {
         loadMealRequests();
     }
-};
+};
