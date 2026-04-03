@@ -8,58 +8,50 @@ async function getAdminId() {
   return user ? user.id : null;
 }
 
-// --- NEW: Feature plan Logic ---
-function applyPlanFeatures(plan) {
-  console.log("Applying features for plan:", plan);
+// --- NEW: Feature flag & Plan Logic ---
+function applyPlanFeatures(plan, enabledFeatures = []) {
+  console.log("Applying features for plan:", plan, "Enabled modules:", enabledFeatures);
 
   const navLinks = document.querySelectorAll('.nav-link');
   
-  // Iterate through all navigation links to show/hide based on plan
   navLinks.forEach(link => {
     const section = link.dataset.section;
     const isReportLink = link.getAttribute('href') && link.getAttribute('href').includes('report.html');
     const isLogout = link.id === 'logoutBtn' || (link.innerText && link.innerText.includes('Logout'));
 
-    // Logic Tree for Plans
-    if (plan === 'pro') {
-      // PRO: Show Everything
+    // Base default visibility (Free plan shows minimum)
+    let isVisible = true;
+    if (plan === 'free' || !plan) {
+      if (section !== 'messInfo' && section !== 'plans' && !isLogout) {
+         isVisible = false;
+      }
+    } else if (plan === 'starter') {
+      if (isReportLink) isVisible = false;
+    }
+
+    // Advanced Feature Toggles (Overrides based on database)
+    if (section === 'students' && !enabledFeatures.includes('student_management')) isVisible = false;
+    if (section === 'payments' && !enabledFeatures.includes('billing')) isVisible = false;
+    if (section === 'menu' && !enabledFeatures.includes('menu_management')) isVisible = false;
+    if (section === 'scan' && !enabledFeatures.includes('qr_attendance')) isVisible = false;
+    if (section === 'mealRequests' && !enabledFeatures.includes('meal_requests')) isVisible = false;
+
+    if (isVisible) {
       link.classList.remove('hidden');
-    } 
-    else if (plan === 'starter') {
-      // STARTER: Hide Reports link, Show Everything Else
-      if (isReportLink) {
-        link.classList.add('hidden');
-      } else {
-        link.classList.remove('hidden');
-      }
-    } 
-    else {
-      // FREE (or unknown): Hide Everything EXCEPT Mess Info
-      // We also always keep the 'Logout' button visible
-      if (section === 'messInfo' || section === 'plans' || isLogout) {
-         link.classList.remove('hidden');
-      } else {
-         link.classList.add('hidden');
-      }
+    } else {
+      link.classList.add('hidden');
     }
   });
 
   // Force Redirect for Free Plan if on a restricted page
-  // (Default page is usually Dashboard, so we switch to Mess Info)
   if (plan === 'free' || !plan) {
-      const messInfoSection = document.getElementById('messInfoSection');
       const dashboardSection = document.getElementById('dashboardSection');
-      
-      // If dashboard is currently visible (which is default), hide it and show Mess Info
       if (dashboardSection && !dashboardSection.classList.contains('hidden')) {
           dashboardSection.classList.add('hidden');
+          const messInfoSection = document.getElementById('messInfoSection');
           if (messInfoSection) messInfoSection.classList.remove('hidden');
-          
-          // Update Title
           const pageTitle = document.getElementById('pageTitle');
           if(pageTitle) pageTitle.textContent = "Mess Info";
-          
-          // Load Data for Mess Info
           if (typeof loadMessInfo === 'function') loadMessInfo();
       }
   }
@@ -74,10 +66,9 @@ async function checkAuth() {
     return;
   }
 
-  // Fetch role AND subscription_plan
   const { data: profile, error } = await supabase
     .from('user_profiles')
-    .select('role, subscription_plan')
+    .select('role, subscription_plan, payment_status, tenant_id')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -88,12 +79,32 @@ async function checkAuth() {
     return;
   }
 
-  // Default to 'free' if no plan is set in database
+  // ── Payment Wall ───────────────────────────────────────────
+  // If payment not confirmed (custom plans), block dashboard access
+  if (profile.payment_status !== 'paid') {
+    window.location.href = 'contact.html';
+    return;
+  }
+
+  // ── Feature Resolution ─────────────────────────────────────
+  // Priority: plan_features table (plan-level) → fallback to defaults
   const currentPlan = profile.subscription_plan || 'free';
-  
-  // Apply the plan logic
-  applyPlanFeatures(currentPlan);
+  let enabledFeatures = [];
+
+  const { data: planFeatures } = await supabase
+    .from('plan_features')
+    .select('feature_id')
+    .eq('plan_name', currentPlan);
+
+  if (planFeatures && planFeatures.length > 0) {
+    enabledFeatures = planFeatures.map(f => f.feature_id);
+  }
+
+  // Apply feature visibility
+  applyPlanFeatures(currentPlan, enabledFeatures);
 }
+
+
 
 // --- QR SCANNER FUNCTIONS ---
 let html5QrcodeScanner;
@@ -113,11 +124,16 @@ function getPreviousMealType() {
     return null; // No meal has passed yet today to mark
 }
 
+// Helper to format meal name to Title case (Breakfast, Lunch, Dinner) for meal_requests table
+function formatMealName(meal) {
+    if (!meal) return null;
+    return meal.charAt(0).toUpperCase() + meal.slice(1).toLowerCase();
+}
+
 async function onScanSuccess(decodedText, decodedResult) {
     const studentId = decodedText;
     const scanResultEl = document.getElementById('scanResult');
-    scanResultEl.textContent = 'Processing...';
-    scanResultEl.className = 'mt-4 text-center font-semibold text-lg text-gray-500';
+    scanResultEl.innerHTML = '<div class="text-gray-500 font-semibold text-lg">Processing...</div>';
 
     if (html5QrcodeScanner && html5QrcodeScanner.getState() === 2) {
         html5QrcodeScanner.pause();
@@ -130,13 +146,39 @@ async function onScanSuccess(decodedText, decodedResult) {
         const meal = getMealTypeByTime();
         if (!meal) throw new Error('No meal service is active at this time.');
 
-        const { data: student, error: studentError } = await supabase
+        // 1. Get Admin Profile for tenant_id (needed for mealiez lookup)
+        const { data: adminProfile } = await supabase
+            .from('user_profiles')
+            .select('tenant_id')
+            .eq('id', adminId)
+            .single();
+
+        // 2. Try Standard Students First
+        let { data: student, error: studentError } = await supabase
             .from('students')
-            .select('id, name')
+            .select('id, name, email, mobile')
             .eq('id', studentId)
             .eq('mess_id', adminId)
-            .single();
-        if (studentError) throw new Error('Student not found in this mess.');
+            .maybeSingle();
+
+        // 3. Fallback to Mealiez Students if not found
+        if (!student && adminProfile?.tenant_id) {
+            const { data: mealiez, error: mealiezError } = await supabase
+                .from('student_mealiez')
+                .select('id, name, email, mobile_number')
+                .eq('id', studentId)
+                .eq('tenant_id', adminProfile.tenant_id)
+                .maybeSingle();
+            
+            if (mealiez) {
+                student = {
+                    ...mealiez,
+                    mobile: mealiez.mobile_number
+                };
+            }
+        }
+
+        if (!student) throw new Error('Student not found or not enrolled in this mess.');
 
         const today = new Date().toISOString().split('T')[0];
         const { data: existingAttendance, error: attendanceError } = await supabase
@@ -145,6 +187,7 @@ async function onScanSuccess(decodedText, decodedResult) {
             .eq('student_id', studentId)
             .eq('date', today)
             .eq('meal', meal);
+        
         if (attendanceError) throw new Error('Error checking for duplicates.');
         if (existingAttendance && existingAttendance.length > 0) {
             throw new Error(`Attendance for ${student.name} (${meal}) is already marked.`);
@@ -155,28 +198,57 @@ async function onScanSuccess(decodedText, decodedResult) {
             meal: meal,
             status: 'PRESENT',
             date: today,
-            mess_id: adminId
+            mess_id: adminId,
+            tenant_id: adminProfile?.tenant_id
         });
 
-        // --- DEBUGGING CHANGE IS HERE ---
         if (insertError) {
-            console.error("DETAILED SUPABASE ERROR:", insertError); // This will show the real error
-            throw new Error('Error saving attendance. Check console for details.');
+            console.error("DETAILED SUPABASE ERROR:", insertError);
+            throw new Error('Error saving attendance.');
         }
 
-        scanResultEl.textContent = `Success! Attendance marked for ${student.name}.`;
-        scanResultEl.className = 'mt-4 text-center font-semibold text-lg text-green-600';
+        // --- AUTO-FULFILL MEAL REQUEST ---
+        try {
+            await supabase
+                .from('meal_requests')
+                .update({ status: 'Fulfilled', updated_at: new Date() })
+                .eq('student_id', studentId)
+                .eq('date', today)
+                .eq('meal_type', formatMealName(meal))
+                .eq('status', 'Requested');
+        } catch (mealErr) {
+            console.warn("Auto-fulfillment failed (non-critical):", mealErr);
+        }
+
+        // 4. DISPLAY RICH SUCCESS MESSAGE
+        scanResultEl.innerHTML = `
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 shadow-sm animate-pulse">
+                <div class="text-green-800 font-bold text-xl mb-1">
+                    Success! Marked for ${meal}
+                </div>
+                <div class="bg-white rounded p-3 flex flex-col items-center">
+                    <p class="text-gray-900 font-black text-2xl">${student.name}</p>
+                    <div class="flex gap-4 mt-2 text-sm text-gray-600">
+                        <p class="flex items-center"><svg class="w-4 h-4 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>${student.mobile || 'N/A'}</p>
+                        <p class="flex items-center"><svg class="w-4 h-4 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>${student.email || 'N/A'}</p>
+                    </div>
+                </div>
+            </div>
+        `;
 
     } catch (error) {
-        scanResultEl.textContent = `Error: ${error.message}`;
-        scanResultEl.className = 'mt-4 text-center font-semibold text-lg text-red-600';
+        scanResultEl.innerHTML = `
+            <div class="bg-red-50 border border-red-200 text-red-700 font-bold p-3 rounded-lg">
+                Error: ${error.message}
+            </div>
+        `;
     } finally {
         setTimeout(() => {
             if (html5QrcodeScanner && html5QrcodeScanner.getState() === 3) {
                 html5QrcodeScanner.resume();
-                scanResultEl.textContent = '';
+                scanResultEl.innerHTML = '';
             }
-        }, 2500);
+        }, 5000); // 5 seconds display for easier reading
     }
 }
 
@@ -284,6 +356,9 @@ function setupNavigation() {
           break;
         case 'scan': 
           loadScanner();
+          break;
+        case 'mealRequests':
+          loadMealRequests();
           break;
       
       }
@@ -972,6 +1047,12 @@ async function markAbsenteesForPreviousMeal() {
     const today = new Date().toISOString().split('T')[0];
 
     try {
+        const { data: adminProfile } = await supabase
+            .from('user_profiles')
+            .select('tenant_id')
+            .eq('id', adminId)
+            .single();
+
         // 1. Get all active students for this mess
         const { data: students, error: studentError } = await supabase
             .from('students')
@@ -1005,6 +1086,7 @@ async function markAbsenteesForPreviousMeal() {
         const recordsToInsert = absentStudents.map(student => ({
             student_id: student.id,
             mess_id: adminId,
+            tenant_id: adminProfile?.tenant_id,
             date: today,
             meal: previousMeal,
             status: 'ABSENT', // Mark as ABSENT
@@ -1024,6 +1106,20 @@ async function markAbsenteesForPreviousMeal() {
              }
         } else {
             statusEl.textContent = `Marked ${recordsToInsert.length} student(s) as absent for ${previousMeal}.`;
+            
+            // --- NEW: AUTO-CANCEL MEAL REQUESTS FOR ABSENTEES ---
+            try {
+                const absentIds = absentStudents.map(s => s.id);
+                await supabase
+                    .from('meal_requests')
+                    .update({ status: 'Cancelled', updated_at: new Date() })
+                    .in('student_id', absentIds)
+                    .eq('date', today)
+                    .eq('meal_type', formatMealName(previousMeal))
+                    .eq('status', 'Requested');
+            } catch (mealErr) {
+                console.warn("Auto-cancellation of meal requests failed (non-critical):", mealErr);
+            }
         }
 
          // Refresh the attendance view
@@ -1469,3 +1565,98 @@ document.getElementById('paymentStatusBtn')?.addEventListener('click', async () 
     }
   }
 });
+
+// --- NEW: Meal Requests Logic ---
+async function loadMealRequests() {
+    const adminId = await getAdminId();
+    if (!adminId) return;
+
+    const tbody = document.getElementById('mealRequestsTableBody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 italic">Loading requests...</td></tr>';
+
+    // 1. Resolve Tenant ID from Admin ID
+    const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('tenant_id')
+        .eq('id', adminId)
+        .single();
+
+    if (profileError || !profile?.tenant_id) {
+        console.error('Error resolving tenant ID:', profileError);
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-red-500">Error: Could not verify mess identity.</td></tr>';
+        return;
+    }
+
+    // 2. Fetch meal requests using the correct tenant_id
+    const { data: requests, error } = await supabase
+        .from('meal_requests')
+        .select(`
+            *,
+            students (name)
+        `)
+        .eq('tenant_id', profile.tenant_id) 
+        .order('date', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching meal requests:', error);
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-red-500">Error loading data.</td></tr>';
+        return;
+    }
+
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    // Calculate and update counts
+    const pendingCount = (requests || []).filter(r => r.status === 'Requested').length;
+    const fulfilledCount = (requests || []).filter(r => r.status === 'Fulfilled').length;
+    
+    const pendingEl = document.getElementById('pendingRequestsCount');
+    const fulfilledEl = document.getElementById('fulfilledRequestsCount');
+    if(pendingEl) pendingEl.textContent = pendingCount;
+    if(fulfilledEl) fulfilledEl.textContent = fulfilledCount;
+
+    if (requests && requests.length > 0) {
+        requests.forEach(req => {
+            const statusClass = req.status === 'Fulfilled' ? 'bg-green-100 text-green-800' : 
+                                req.status === 'Cancelled' ? 'bg-red-100 text-red-800' : 
+                                'bg-yellow-100 text-yellow-800';
+            
+            const actions = req.status === 'Requested' ? `
+                <button onclick="updateMealRequestStatus('${req.id}', 'Fulfilled')" class="text-green-600 hover:text-green-800 mr-3 font-medium">Confirm</button>
+                <button onclick="updateMealRequestStatus('${req.id}', 'Cancelled')" class="text-red-600 hover:text-red-800 font-medium">Cancel</button>
+            ` : `<span class="text-gray-400 italic text-xs">No actions</span>`;
+
+            const row = `
+                <tr class="hover:bg-gray-50 border-b">
+                    <td class="px-4 py-3 text-sm text-gray-900 font-medium">${req.students?.name || 'Unknown'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900">${new Date(req.date).toLocaleDateString()}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900">${req.meal_type}</td>
+                    <td class="px-4 py-3 text-sm">
+                        <span class="px-2 py-1 rounded-full text-xs font-semibold ${statusClass}">
+                            ${req.status}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm">${actions}</td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    } else {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500 italic">No meal requests found.</td></tr>';
+    }
+}
+
+window.updateMealRequestStatus = async function(requestId, newStatus) {
+    if (!confirm(`Mark this request as ${newStatus}?`)) return;
+
+    const { error } = await supabase
+        .from('meal_requests')
+        .update({ status: newStatus, updated_at: new Date() })
+        .eq('id', requestId);
+
+    if (error) {
+        alert('Error updating request: ' + error.message);
+    } else {
+        loadMealRequests();
+    }
+};

@@ -10,13 +10,18 @@ async function checkAuth() {
     return null;
   }
 
-  const { data: profile } = await supabase
+  console.log("Checking student profile for user:", user.id);
+
+  const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('role')
+    .select('role, mess_name, tenant_id')
     .eq('id', user.id)
     .maybeSingle();
 
+  console.log("User Profile Result:", profile, profileError);
+
   if (!profile || profile.role !== 'student') {
+    console.error("Access denied. Role is:", profile?.role);
     alert('Access denied. Student privileges required.');
     await supabase.auth.signOut();
     window.location.href = 'login.html';
@@ -24,43 +29,71 @@ async function checkAuth() {
   }
 
   // Fetch the student profile
-  const { data: student } = await supabase
+  console.log("Attempting fetch from standard students table...");
+  let { data: student, error: studentError } = await supabase
     .from('students')
     .select('*')
     .eq('user_id', user.id)
     .maybeSingle();
 
+  console.log("Standard Student Result:", student, studentError);
+
+  // If not found in standard students, check student_mealiez
   if (!student) {
+    console.log("Not found in standard students. Checking student_mealiez...");
+    const { data: mealiezStudent, error: mealiezError } = await supabase
+      .from('student_mealiez')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    console.log("Mealiez Student Result:", mealiezStudent, mealiezError);
+
+    if (mealiezStudent) {
+      // Map mealiez fields to standard student structure
+      student = {
+        ...mealiezStudent,
+        mobile: mealiezStudent.mobile_number,
+        // For mealiez, we might not have a messAdmin UUID, but we have tenant_id
+        mess_id: mealiezStudent.tenant_id // Using tenant_id as fallthrough for features
+      };
+    }
+  }
+
+  if (!student) {
+    console.error("No student record found in any table for user:", user.id);
     alert('Student profile not found.');
     await supabase.auth.signOut();
     window.location.href = 'login.html';
     return null;
   }
 
+  // Attach profile info
+  student.mess_name_profile = profile.mess_name;
   return student;
 }
 
 // --- NEW: DASHBOARD STATE MANAGER ---
 // This function decides what to show based on if the student has a mess or not
 function updateDashboardState() {
-    const messFeatures = document.getElementById('messFeatures');
-    const noMessState = document.getElementById('noMessState');
-    const messNameEl = document.getElementById('messName');
+  const messFeatures = document.getElementById('messFeatures');
+  const noMessState = document.getElementById('noMessState');
+  const messNameEl = document.getElementById('messName');
 
-    if (currentStudent.mess_id) {
-        // CASE A: Student HAS a Mess
-        if(messFeatures) messFeatures.classList.remove('hidden');
-        if(noMessState) noMessState.classList.add('hidden');
-    } else {
-        // CASE B: Student has NO Mess (Lite Mode)
-        if(messFeatures) messFeatures.classList.add('hidden'); 
-        if(noMessState) noMessState.classList.remove('hidden');
-        
-        if (messNameEl) {
-            messNameEl.textContent = 'Not Enrolled';
-            messNameEl.classList.add('text-orange-600');
-        }
+  if (currentStudent.mess_id) {
+    // CASE A: Student HAS a Mess
+    if (messFeatures) messFeatures.classList.remove('hidden');
+    if (noMessState) noMessState.classList.add('hidden');
+  } else {
+    // CASE B: Student has NO Mess (Lite Mode)
+    if (messFeatures) messFeatures.classList.add('hidden');
+    if (noMessState) noMessState.classList.remove('hidden');
+
+    if (messNameEl) {
+      messNameEl.textContent = 'Not Enrolled';
+      messNameEl.classList.add('text-orange-600');
     }
+  }
 }
 
 async function loadStudentInfo() {
@@ -71,6 +104,14 @@ async function loadStudentInfo() {
   document.getElementById('welcomeName').textContent = currentStudent.name;
 
   // Fetch and display mess name
+  const messNameEl = document.getElementById('messName');
+  if (!messNameEl) return;
+
+  if (currentStudent.mess_name_profile) {
+    messNameEl.textContent = currentStudent.mess_name_profile;
+    return;
+  }
+
   if (currentStudent.mess_id) {
     const { data: messAdmin, error } = await supabase
       .from('user_profiles')
@@ -79,9 +120,9 @@ async function loadStudentInfo() {
       .single();
 
     if (messAdmin && messAdmin.full_name) {
-      document.getElementById('messName').textContent = messAdmin.full_name;
+      messNameEl.textContent = messAdmin.full_name;
     } else {
-      document.getElementById('messName').textContent = 'N/A';
+      messNameEl.textContent = 'N/A';
     }
   }
 }
@@ -108,16 +149,16 @@ async function loadAttendanceStats() {
   document.getElementById('daysPresent').textContent = distinctDaysPresent;
 
   const recentContainer = document.getElementById('recentAttendance');
-  recentContainer.innerHTML = ''; 
+  recentContainer.innerHTML = '';
 
   if (attendance && attendance.length > 0) {
     const recent = attendance.slice(0, 7);
     recent.forEach(record => {
-        const isPresent = record.status.toUpperCase() === 'PRESENT';
-        const statusClass = isPresent ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-        const mealText = record.meal ? ` - ${record.meal}` : '';
+      const isPresent = record.status.toUpperCase() === 'PRESENT';
+      const statusClass = isPresent ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+      const mealText = record.meal ? ` - ${record.meal}` : '';
 
-        recentContainer.innerHTML += `
+      recentContainer.innerHTML += `
           <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
             <div>
               <p class="font-semibold text-gray-800">${new Date(record.date).toLocaleDateString()}${mealText}</p>
@@ -134,6 +175,76 @@ async function loadAttendanceStats() {
   }
 }
 
+// --- NEW: FEATURE GATING ---
+async function applyPlanFeatures() {
+  if (!currentStudent || !currentStudent.tenant_id) return;
+
+  try {
+    const { data: features, error } = await supabase
+      .from('tenant_features')
+      .select('feature_id, enabled')
+      .eq('tenant_id', currentStudent.tenant_id);
+
+    if (error) throw error;
+
+    const enabledFeatures = new Set(features.filter(f => f.enabled).map(f => f.feature_id));
+
+    // Show/Hide Meal Request Section
+    const mealReqSection = document.getElementById('mealRequestSection');
+    const quickMealReqBtn = document.getElementById('quickMealReqBtn');
+    if (mealReqSection) {
+      if (enabledFeatures.has('meal_requests')) {
+        mealReqSection.classList.remove('hidden');
+        if (quickMealReqBtn) quickMealReqBtn.classList.remove('hidden');
+        updateAutoMealStatus(); // Initialize Auto tab
+        loadMealRequests();
+      } else {
+        mealReqSection.classList.add('hidden');
+        if (quickMealReqBtn) quickMealReqBtn.classList.add('hidden');
+      }
+    }
+  } catch (err) {
+    console.error("Error applying plan features:", err);
+  }
+}
+
+async function loadMealRequests() {
+  if (!currentStudent) return;
+
+  const { data: requests, error } = await supabase
+    .from('meal_requests')
+    .select('*')
+    .eq('student_id', currentStudent.id)
+    .order('date', { ascending: false })
+    .limit(10);
+
+  const historyContainer = document.getElementById('mealRequestHistory');
+  if (!historyContainer) return;
+
+  if (error || !requests || requests.length === 0) {
+    historyContainer.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-sm text-gray-500 italic">No requests found.</td></tr>`;
+    return;
+  }
+
+  historyContainer.innerHTML = requests.map(req => {
+    let statusClass = 'bg-blue-100 text-blue-800';
+    if (req.status === 'Fulfilled') statusClass = 'bg-green-100 text-green-800';
+    if (req.status === 'Cancelled') statusClass = 'bg-red-100 text-red-800';
+
+    return `
+            <tr>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${new Date(req.date).toLocaleDateString()}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${req.meal_type}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClass}">
+                        ${req.status}
+                    </span>
+                </td>
+            </tr>
+        `;
+  }).join('');
+}
+
 async function loadPaymentInfo() {
   // SAFETY CHECK: Stop if no mess
   if (!currentStudent || !currentStudent.mess_id) return;
@@ -146,10 +257,10 @@ async function loadPaymentInfo() {
 
   const statusEl = document.getElementById('paymentStatus');
   const historyContainer = document.getElementById('paymentHistory');
-  
+
   if (!statusEl || !historyContainer) return;
 
-  historyContainer.innerHTML = ''; 
+  historyContainer.innerHTML = '';
 
   if (!payments || payments.length === 0) {
     statusEl.innerHTML = `<span class="text-green-600">No Bills</span>`;
@@ -161,49 +272,49 @@ async function loadPaymentInfo() {
   let totalPaid = 0;
 
   payments.forEach(p => {
-      totalBilled += parseFloat(p.total_amount || 0);
-      totalPaid += parseFloat(p.paid_amount || 0);
+    totalBilled += parseFloat(p.total_amount || 0);
+    totalPaid += parseFloat(p.paid_amount || 0);
   });
 
   const netDue = totalBilled - totalPaid;
 
   if (netDue <= 0.5) {
-    statusEl.innerHTML = netDue < -0.5 
-        ? `<span class="text-green-600">Credit: ₹${Math.abs(netDue).toFixed(2)}</span>`
-        : `<span class="text-green-600">Fully Paid</span>`;
+    statusEl.innerHTML = netDue < -0.5
+      ? `<span class="text-green-600">Credit: ₹${Math.abs(netDue).toFixed(2)}</span>`
+      : `<span class="text-green-600">Fully Paid</span>`;
   } else {
     statusEl.innerHTML = `<span class="text-red-600">Due: ₹${netDue.toFixed(2)}</span>`;
   }
-  
-  payments.forEach(payment => {
-      const bill = parseFloat(payment.total_amount || 0);
-      const pay = parseFloat(payment.paid_amount || 0);
-      
-      let title = '';
-      let amountDisplay = '';
-      let icon = '';
-      let bgColor = '';
 
-      if (bill > 0 && pay === 0) {
-          title = 'Bill Generated';
-          amountDisplay = `<span class="text-red-600 font-bold">- ₹${bill}</span>`;
-          bgColor = 'bg-white';
-          icon = `<div class="p-2 rounded-full bg-red-100 text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg></div>`;
-      } 
-      else if (bill === 0 && pay > 0) {
-          title = 'Payment Made';
-          amountDisplay = `<span class="text-green-600 font-bold">+ ₹${pay}</span>`;
-          bgColor = 'bg-green-50';
-          icon = `<div class="p-2 rounded-full bg-green-100 text-green-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></div>`;
-      }
-      else {
-          title = 'Transaction';
-          amountDisplay = `<span class="text-gray-600">₹${Math.max(bill, pay)}</span>`;
-          bgColor = 'bg-gray-50';
-          icon = `<div class="p-2 rounded-full bg-gray-200 text-gray-600">?</div>`;
-      }
-      
-      historyContainer.innerHTML += `
+  payments.forEach(payment => {
+    const bill = parseFloat(payment.total_amount || 0);
+    const pay = parseFloat(payment.paid_amount || 0);
+
+    let title = '';
+    let amountDisplay = '';
+    let icon = '';
+    let bgColor = '';
+
+    if (bill > 0 && pay === 0) {
+      title = 'Bill Generated';
+      amountDisplay = `<span class="text-red-600 font-bold">- ₹${bill}</span>`;
+      bgColor = 'bg-white';
+      icon = `<div class="p-2 rounded-full bg-red-100 text-red-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg></div>`;
+    }
+    else if (bill === 0 && pay > 0) {
+      title = 'Payment Made';
+      amountDisplay = `<span class="text-green-600 font-bold">+ ₹${pay}</span>`;
+      bgColor = 'bg-green-50';
+      icon = `<div class="p-2 rounded-full bg-green-100 text-green-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></div>`;
+    }
+    else {
+      title = 'Transaction';
+      amountDisplay = `<span class="text-gray-600">₹${Math.max(bill, pay)}</span>`;
+      bgColor = 'bg-gray-50';
+      icon = `<div class="p-2 rounded-full bg-gray-200 text-gray-600">?</div>`;
+    }
+
+    historyContainer.innerHTML += `
         <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg ${bgColor}">
           <div class="flex items-center space-x-3">
             ${icon}
@@ -223,7 +334,7 @@ async function loadPaymentInfo() {
 async function loadPlanDaysRemaining() {
   if (!currentStudent || !currentStudent.plan_type || !currentStudent.plan_start_date) {
     const el = document.getElementById('daysRemaining');
-    if(el) el.textContent = 'N/A';
+    if (el) el.textContent = 'N/A';
     return;
   }
 
@@ -238,16 +349,16 @@ async function loadPlanDaysRemaining() {
     const startDate = new Date(currentStudent.plan_start_date);
     const expiryDate = new Date(startDate);
     expiryDate.setDate(startDate.getDate() + plan.duration_days);
-    
+
     const today = new Date();
     const diffTime = expiryDate - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     const el = document.getElementById('daysRemaining');
-    if(el) el.textContent = diffDays > 0 ? diffDays : 'Expired';
+    if (el) el.textContent = diffDays > 0 ? diffDays : 'Expired';
   } else {
     const el = document.getElementById('daysRemaining');
-    if(el) el.textContent = 'N/A';
+    if (el) el.textContent = 'N/A';
   }
 }
 
@@ -266,17 +377,96 @@ async function loadTodayMenu() {
   const l = document.getElementById('lunch');
   const d = document.getElementById('dinner');
 
-  if(b) b.textContent = menu ? (menu.breakfast || 'Not available') : 'Not available';
-  if(l) l.textContent = menu ? (menu.lunch || 'Not available') : 'Not available';
-  if(d) d.textContent = menu ? (menu.dinner || 'Not available') : 'Not available';
+  if (b) b.textContent = menu ? (menu.breakfast || 'Not available') : 'Not available';
+  if (l) l.textContent = menu ? (menu.lunch || 'Not available') : 'Not available';
+  if (d) d.textContent = menu ? (menu.dinner || 'Not available') : 'Not available';
+}
+
+function getUpcomingMeal() {
+  const hour = new Date().getHours();
+  if (hour < 10) return { name: 'Breakfast', type: 'Breakfast' };
+  if (hour < 15) return { name: 'Lunch', type: 'Lunch' };
+  if (hour < 22) return { name: 'Dinner', type: 'Dinner' };
+  return null; // Past 10 PM
+}
+
+function updateAutoMealStatus() {
+  const meal = getUpcomingMeal();
+  const title = document.getElementById('detectedMealTitle');
+  const btn = document.getElementById('autoMealReqBtn');
+  const nameEl = document.getElementById('autoMealName');
+
+  if (!title || !btn || !nameEl) return;
+
+  if (meal) {
+    title.textContent = `Upcoming Meal: ${meal.name}`;
+    nameEl.textContent = meal.name;
+    btn.disabled = false;
+  } else {
+    title.textContent = "No More Meals for Today";
+    nameEl.textContent = "N/A";
+    btn.disabled = true;
+    document.getElementById('detectedMealSubtitle').textContent = "Please use 'Specific Request' for tomorrow or check back in the morning.";
+  }
+}
+
+async function handleAutoMealRequest() {
+  const meal = getUpcomingMeal();
+  if (!meal) return;
+
+  const btn = document.getElementById('autoMealReqBtn');
+  const msg = document.getElementById('autoReqMessage');
+  const date = new Date().toISOString().split('T')[0];
+
+  if (!currentStudent || !currentStudent.tenant_id) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+  msg.textContent = '';
+
+  try {
+    // Check for duplicate
+    const { data: existing } = await supabase
+      .from('meal_requests')
+      .select('id')
+      .eq('student_id', currentStudent.id)
+      .eq('date', date)
+      .eq('meal_type', meal.type)
+      .maybeSingle();
+
+    if (existing) {
+      throw new Error(`You already have a request for ${meal.name} today.`);
+    }
+
+    const { error } = await supabase
+      .from('meal_requests')
+      .insert({
+        student_id: currentStudent.id,
+        tenant_id: currentStudent.tenant_id,
+        date: date,
+        meal_type: meal.type,
+        status: 'Requested'
+      });
+
+    if (error) throw error;
+
+    msg.textContent = `Success! ${meal.name} requested.`;
+    msg.className = 'mt-4 text-sm text-green-600 font-semibold';
+    loadMealRequests();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = 'mt-4 text-sm text-red-600 font-semibold';
+  } finally {
+    updateAutoMealStatus(); // Reset button text
+  }
 }
 
 function getMealTypeByTime() {
-    const hour = new Date().getHours();
-    if (hour >= 7 && hour < 11) return 'BREAKFAST';
-    if (hour >= 12 && hour < 16) return 'LUNCH';
-    if (hour >= 19 && hour < 22) return 'DINNER';
-    return null;
+  const hour = new Date().getHours();
+  if (hour >= 7 && hour < 11) return 'BREAKFAST';
+  if (hour >= 12 && hour < 16) return 'LUNCH';
+  if (hour >= 19 && hour < 22) return 'DINNER';
+  return null;
 }
 
 async function checkTodayAttendance() {
@@ -318,9 +508,9 @@ async function checkTodayAttendance() {
 function setupStarRating() {
   const container = document.getElementById('starRatingContainer');
   const ratingInput = document.getElementById('starRating');
-  if(!container || !ratingInput) return;
-  
-  container.innerHTML = ''; 
+  if (!container || !ratingInput) return;
+
+  container.innerHTML = '';
 
   for (let i = 1; i <= 5; i++) {
     const star = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -329,17 +519,17 @@ function setupStarRating() {
     star.setAttribute('fill', 'currentColor');
     star.setAttribute('viewBox', '0 0 24 24');
     star.setAttribute('stroke', 'none');
-    
+
     star.innerHTML = `<path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118L2.98 9.1c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>`;
-    
+
     star.addEventListener('click', () => {
       ratingInput.value = i;
       updateStars(i);
     });
-    
+
     star.addEventListener('mouseover', () => updateStars(i, true));
     star.addEventListener('mouseout', () => updateStars(parseInt(ratingInput.value)));
-    
+
     container.appendChild(star);
   }
 }
@@ -373,17 +563,17 @@ async function loadMyReview() {
   const deleteBtn = document.getElementById('deleteReviewBtn');
 
   if (review) {
-    if(ratingInput) ratingInput.value = review.rating;
+    if (ratingInput) ratingInput.value = review.rating;
     updateStars(review.rating);
-    if(reviewText) reviewText.value = review.review_text || '';
-    if(submitBtn) submitBtn.textContent = 'Update My Review';
-    if(deleteBtn) deleteBtn.classList.remove('hidden');
+    if (reviewText) reviewText.value = review.review_text || '';
+    if (submitBtn) submitBtn.textContent = 'Update My Review';
+    if (deleteBtn) deleteBtn.classList.remove('hidden');
   } else {
-    if(ratingInput) ratingInput.value = 0;
+    if (ratingInput) ratingInput.value = 0;
     updateStars(0);
-    if(reviewText) reviewText.value = '';
-    if(submitBtn) submitBtn.textContent = 'Submit Review';
-    if(deleteBtn) deleteBtn.classList.add('hidden');
+    if (reviewText) reviewText.value = '';
+    if (submitBtn) submitBtn.textContent = 'Submit Review';
+    if (deleteBtn) deleteBtn.classList.add('hidden');
   }
 }
 
@@ -405,16 +595,16 @@ async function handleSubmitReview(e) {
   msgEl.className = 'text-sm text-gray-500';
 
   const { error } = await supabase
-  .from('reviews')
-  .upsert(
-    {
-      student_id: currentStudent.id,
-      mess_id: currentStudent.mess_id,
-      rating: rating,
-      review_text: reviewText
-    }
-  );
-  
+    .from('reviews')
+    .upsert(
+      {
+        student_id: currentStudent.id,
+        mess_id: currentStudent.mess_id,
+        rating: rating,
+        review_text: reviewText
+      }
+    );
+
   if (error) {
     msgEl.textContent = 'Error: ' + error.message;
     msgEl.className = 'text-sm text-red-600';
@@ -453,88 +643,117 @@ async function handleDeleteReview() {
   }
 }
 
+function generateQRCode() {
+  const qrContainer = document.getElementById('qrcode');
+  const qrMessage = document.getElementById('qrMessage');
+
+  if (!qrContainer) return;
+
+  qrContainer.innerHTML = '';
+  if (qrMessage) qrMessage.textContent = '';
+
+  if (currentStudent && currentStudent.id) {
+    try {
+      new QRCode(qrContainer, {
+        text: currentStudent.id,
+        width: 200,
+        height: 200,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    } catch (err) {
+      console.error("QR Code generation failed:", err);
+      if (qrMessage) qrMessage.textContent = "Could not generate QR Code.";
+    }
+  } else {
+    if (qrMessage) qrMessage.textContent = "Could not generate QR Code: Student ID not found.";
+  }
+}
+
 // Attendance Button Listener
 const attBtn = document.getElementById('markAttendanceBtn');
 if (attBtn) {
-    attBtn.addEventListener('click', async () => {
-        if (!currentStudent || !currentStudent.mess_id) return;
+  attBtn.addEventListener('click', async () => {
+    if (!currentStudent || !currentStudent.mess_id) return;
 
-        const btn = document.getElementById('markAttendanceBtn');
-        const msg = document.getElementById('attendanceMessage');
-        const meal = getMealTypeByTime();
+    const btn = document.getElementById('markAttendanceBtn');
+    const msg = document.getElementById('attendanceMessage');
+    const meal = getMealTypeByTime();
 
-        if (!meal) {
-            alert('No meal service is currently active.');
-            return;
-        }
+    if (!meal) {
+      alert('No meal service is currently active.');
+      return;
+    }
 
-        btn.disabled = true;
-        btn.textContent = 'Marking...';
-        const today = new Date().toISOString().split('T')[0];
+    btn.disabled = true;
+    btn.textContent = 'Marking...';
+    const today = new Date().toISOString().split('T')[0];
 
-        try {
-            const { error } = await supabase.from('attendance').insert({
-                student_id: currentStudent.id,
-                date: today,
-                status: 'Present',
-                meal: meal,
-                mess_id: currentStudent.mess_id
-            });
-            if (error) {
-                if (error.code === '23505') throw new Error(`Attendance for ${meal} is already marked today.`);
-                throw error;
-            }
-            msg.textContent = 'Attendance marked successfully!';
-            msg.className = 'mt-4 text-sm text-green-600 font-semibold';
-            btn.textContent = `Attendance Marked for ${meal}`;
-            loadAttendanceStats();
-        } catch (error) {
-            msg.textContent = error.message;
-            msg.className = 'mt-4 text-sm text-red-600 font-semibold';
-            btn.disabled = false;
-            btn.textContent = `Tap to Mark for ${meal}`;
-        }
-    });
+    try {
+      const { error } = await supabase.from('attendance').insert({
+        student_id: currentStudent.id,
+        date: today,
+        status: 'Present',
+        meal: meal,
+        mess_id: currentStudent.mess_id,
+        tenant_id: currentStudent.tenant_id
+      });
+      if (error) {
+        if (error.code === '23505') throw new Error(`Attendance for ${meal} is already marked today.`);
+        throw error;
+      }
+      msg.textContent = 'Attendance marked successfully!';
+      msg.className = 'mt-4 text-sm text-green-600 font-semibold';
+      btn.textContent = `Attendance Marked for ${meal}`;
+      loadAttendanceStats();
+    } catch (error) {
+      msg.textContent = error.message;
+      msg.className = 'mt-4 text-sm text-red-600 font-semibold';
+      btn.disabled = false;
+      btn.textContent = `Tap to Mark for ${meal}`;
+    }
+  });
 }
 
 // Receipt Listener
 const dlBtn = document.getElementById('downloadReceiptBtn');
-if(dlBtn) {
-    dlBtn.addEventListener('click', async () => {
-      if (!currentStudent) return;
+if (dlBtn) {
+  dlBtn.addEventListener('click', async () => {
+    if (!currentStudent) return;
 
-      const { data: payments } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('student_id', currentStudent.id)
-        .eq('status', 'Paid')
-        .order('paid_on', { ascending: false })
-        .limit(1);
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('*')
+      .eq('student_id', currentStudent.id)
+      .eq('status', 'Paid')
+      .order('paid_on', { ascending: false })
+      .limit(1);
 
-      if (!payments || payments.length === 0) {
-        alert('No paid receipts available');
-        return;
-      }
+    if (!payments || payments.length === 0) {
+      alert('No paid receipts available');
+      return;
+    }
 
-      const payment = payments[0];
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
+    const payment = payments[0];
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
 
-      doc.setFontSize(20);
-      doc.text('Payment Receipt', 105, 20, { align: 'center' });
+    doc.setFontSize(20);
+    doc.text('Payment Receipt', 105, 20, { align: 'center' });
 
-      doc.setFontSize(12);
-      doc.text(`Student: ${currentStudent.name}`, 20, 40);
-      doc.text(`Email: ${currentStudent.email}`, 20, 50);
-      doc.text(`Room: ${currentStudent.room_no}`, 20, 60);
-      doc.text(`Plan: ${currentStudent.plan_type}`, 20, 70);
+    doc.setFontSize(12);
+    doc.text(`Student: ${currentStudent.name}`, 20, 40);
+    doc.text(`Email: ${currentStudent.email}`, 20, 50);
+    doc.text(`Room: ${currentStudent.room_no}`, 20, 60);
+    doc.text(`Plan: ${currentStudent.plan_type}`, 20, 70);
 
-      doc.text(`Amount Paid: ₹${payment.total_amount}`, 20, 90);
-      doc.text(`Payment Date: ${new Date(payment.paid_on).toLocaleDateString()}`, 20, 100);
-      doc.text(`Status: ${payment.status}`, 20, 110);
+    doc.text(`Amount Paid: ₹${payment.total_amount}`, 20, 90);
+    doc.text(`Payment Date: ${new Date(payment.paid_on).toLocaleDateString()}`, 20, 100);
+    doc.text(`Status: ${payment.status}`, 20, 110);
 
-      doc.save(`receipt_${payment.id}.pdf`);
-    });
+    doc.save(`receipt_${payment.id}.pdf`);
+  });
 }
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
@@ -547,28 +766,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (currentStudent) {
     // 1. UPDATE DASHBOARD STATE FIRST
     updateDashboardState();
-    
+
     // 2. Load Mess Info (Safely inside updateDashboardState logic or here)
     await loadStudentInfo();
-    
+
     if (currentStudent.mess_id) {
-        await loadAttendanceStats();
-        await loadPaymentInfo();
-        await loadTodayMenu();
-        await checkTodayAttendance();
-        await loadPlanDaysRemaining();
-        
-        setupStarRating();
-        await loadMyReview();
-        document.getElementById('reviewForm').addEventListener('submit', handleSubmitReview);
-        document.getElementById('deleteReviewBtn').addEventListener('click', handleDeleteReview);
+      await loadAttendanceStats();
+      await loadPaymentInfo();
+      await loadTodayMenu();
+      await checkTodayAttendance();
+      await loadPlanDaysRemaining();
+      await applyPlanFeatures();
+      generateQRCode();
+
+      setupStarRating();
+      await loadMyReview();
+      document.getElementById('reviewForm').addEventListener('submit', handleSubmitReview);
+      document.getElementById('deleteReviewBtn').addEventListener('click', handleDeleteReview);
     }
 
     // 3. Always run CA logic
     await checkCaStatus();
 
     // 4. Auto Removal Check
-    setTimeout(checkAutoRemoval, 2000); 
+    setTimeout(checkAutoRemoval, 2000);
   }
 });
 
@@ -582,250 +803,379 @@ const newPlanDiv = document.getElementById('newPlanDiv');
 const newPlanSelect = document.getElementById('newPlanSelect');
 const changeMessForm = document.getElementById('changeMessForm');
 
-if(changeMessBtn) changeMessBtn.addEventListener('click', () => changeMessModal.classList.remove('hidden'));
-if(closeChangeMessBtn) {
-    closeChangeMessBtn.addEventListener('click', () => {
-        changeMessModal.classList.add('hidden');
-        if(changeMessForm) changeMessForm.reset(); 
-        if(newPlanDiv) newPlanDiv.classList.add('hidden');
-    });
+if (changeMessBtn) changeMessBtn.addEventListener('click', () => changeMessModal.classList.remove('hidden'));
+if (closeChangeMessBtn) {
+  closeChangeMessBtn.addEventListener('click', () => {
+    changeMessModal.classList.add('hidden');
+    if (changeMessForm) changeMessForm.reset();
+    if (newPlanDiv) newPlanDiv.classList.add('hidden');
+  });
 }
 
 let planTimeout;
-if(newMessIdInput) {
-    newMessIdInput.addEventListener('input', (e) => {
-        clearTimeout(planTimeout);
-        const messId = e.target.value.trim();
-        
-        if (!messId) {
-            newPlanDiv.classList.add('hidden');
-            return;
+if (newMessIdInput) {
+  newMessIdInput.addEventListener('input', (e) => {
+    clearTimeout(planTimeout);
+    const messId = e.target.value.trim();
+
+    if (!messId) {
+      newPlanDiv.classList.add('hidden');
+      return;
+    }
+
+    planTimeout = setTimeout(async () => {
+      const { data: plans, error } = await supabase
+        .from('plans')
+        .select('name, price')
+        .eq('mess_id', messId);
+
+      if (newPlanSelect) {
+        newPlanSelect.innerHTML = '<option value="" disabled selected>Select a plan</option>';
+
+        if (!error && plans && plans.length > 0) {
+          plans.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.name;
+            opt.textContent = `${p.name} (₹${p.price})`;
+            newPlanSelect.appendChild(opt);
+          });
+          newPlanDiv.classList.remove('hidden');
+        } else {
+          const opt = document.createElement('option');
+          opt.textContent = "No plans found / Invalid ID";
+          newPlanSelect.appendChild(opt);
+          newPlanDiv.classList.remove('hidden');
         }
-
-        planTimeout = setTimeout(async () => {
-            const { data: plans, error } = await supabase
-                .from('plans')
-                .select('name, price')
-                .eq('mess_id', messId);
-
-            if(newPlanSelect) {
-                newPlanSelect.innerHTML = '<option value="" disabled selected>Select a plan</option>';
-                
-                if (!error && plans && plans.length > 0) {
-                    plans.forEach(p => {
-                        const opt = document.createElement('option');
-                        opt.value = p.name;
-                        opt.textContent = `${p.name} (₹${p.price})`;
-                        newPlanSelect.appendChild(opt);
-                    });
-                    newPlanDiv.classList.remove('hidden');
-                } else {
-                    const opt = document.createElement('option');
-                    opt.textContent = "No plans found / Invalid ID";
-                    newPlanSelect.appendChild(opt);
-                    newPlanDiv.classList.remove('hidden');
-                }
-            }
-        }, 500);
-    });
+      }
+    }, 500);
+  });
 }
 
-if(changeMessForm) {
-    changeMessForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const newMessId = newMessIdInput.value.trim();
-        const newPlan = newPlanSelect.value;
-        const confirmBtn = document.getElementById('confirmChangeBtn');
+if (changeMessForm) {
+  changeMessForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
 
-        if (!newPlan || !newMessId) {
-            alert("Please select a valid mess and plan.");
-            return;
-        }
+    const newMessId = newMessIdInput.value.trim();
+    const newPlan = newPlanSelect.value;
+    const confirmBtn = document.getElementById('confirmChangeBtn');
 
-        if (!confirm("Are you sure you want to switch/join this mess?")) return;
+    if (!newPlan || !newMessId) {
+      alert("Please select a valid mess and plan.");
+      return;
+    }
 
-        confirmBtn.disabled = true;
-        confirmBtn.textContent = "Joining...";
+    if (!confirm("Are you sure you want to switch/join this mess?")) return;
 
-        try {
-            const { error } = await supabase
-                .from('students')
-                .update({
-                    mess_id: newMessId,
-                    plan_type: newPlan,
-                    plan_start_date: new Date().toISOString(), 
-                    status: 'Active', 
-                    room_no: 'Not Assigned' 
-                })
-                .eq('user_id', currentStudent.user_id);
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Joining...";
 
-            if (error) throw error;
+    try {
+      // 1. Resolve Tenant ID from Mess Admin ID
+      const { data: adminProfile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('tenant_id')
+        .eq('id', newMessId)
+        .single();
 
-            alert("Successfully joined new mess!");
-            location.reload(); 
+      if (profileError || !adminProfile?.tenant_id) {
+        throw new Error("Invalid Mess ID. Could not find associated account.");
+      }
 
-        } catch (err) {
-            console.error(err);
-            alert("Error joining mess: " + err.message);
-            confirmBtn.disabled = false;
-            confirmBtn.textContent = "Confirm & Join";
-        }
-    });
+      // 2. Update Student Record with both Mess ID and Tenant ID
+      const { error } = await supabase
+        .from('students')
+        .update({
+          mess_id: newMessId,
+          tenant_id: adminProfile.tenant_id,
+          plan_type: newPlan,
+          plan_start_date: new Date().toISOString(),
+          status: 'Active',
+          room_no: 'Not Assigned'
+        })
+        .eq('user_id', currentStudent.user_id);
+
+      if (error) throw error;
+
+      alert("Successfully joined new mess!");
+      location.reload();
+
+    } catch (err) {
+      console.error(err);
+      alert("Error joining mess: " + err.message);
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = "Confirm & Join";
+    }
+  });
 }
 
 async function checkAutoRemoval() {
-    if (!currentStudent || !currentStudent.mess_id || !currentStudent.plan_start_date) return;
+  if (!currentStudent || !currentStudent.mess_id || !currentStudent.plan_start_date) return;
 
-    const { data: plan } = await supabase
-        .from('plans')
-        .select('duration_days')
-        .eq('mess_id', currentStudent.mess_id)
-        .eq('name', currentStudent.plan_type)
-        .single();
+  const { data: plan } = await supabase
+    .from('plans')
+    .select('duration_days')
+    .eq('mess_id', currentStudent.mess_id)
+    .eq('name', currentStudent.plan_type)
+    .single();
 
-    if (!plan) return;
+  if (!plan) return;
 
-    const startDate = new Date(currentStudent.plan_start_date);
-    const expiryDate = new Date(startDate);
-    expiryDate.setDate(startDate.getDate() + plan.duration_days);
-    
-    const removalThreshold = new Date(expiryDate);
-    removalThreshold.setDate(expiryDate.getDate() + 2); 
+  const startDate = new Date(currentStudent.plan_start_date);
+  const expiryDate = new Date(startDate);
+  expiryDate.setDate(startDate.getDate() + plan.duration_days);
 
-    const today = new Date();
+  const removalThreshold = new Date(expiryDate);
+  removalThreshold.setDate(expiryDate.getDate() + 2);
 
-    if (today > removalThreshold && currentStudent.mess_id !== null) {
-        const { error } = await supabase
-            .from('students')
-            .update({ 
-                mess_id: null,
-                status: 'Inactive',
-                plan_type: null,
-                room_no: ''
-            })
-            .eq('id', currentStudent.id);
+  const today = new Date();
 
-        if (!error) {
-            alert("Your plan expired > 2 days ago. You have been removed from the mess.");
-            location.reload();
-        }
+  if (today > removalThreshold && currentStudent.mess_id !== null) {
+    const { error } = await supabase
+      .from('students')
+      .update({
+        mess_id: null,
+        status: 'Inactive',
+        plan_type: null,
+        room_no: ''
+      })
+      .eq('id', currentStudent.id);
+
+    if (!error) {
+      alert("Your plan expired > 2 days ago. You have been removed from the mess.");
+      location.reload();
     }
+  }
 }
 
 // --- CAMPUS AMBASSADOR LOGIC ---
 // 1. Open Modal
-window.applyForCA = function() {
-    const modal = document.getElementById('caModal');
-    if(!modal || !currentStudent) return;
+window.applyForCA = function () {
+  const modal = document.getElementById('caModal');
+  if (!modal || !currentStudent) return;
 
-    document.getElementById('caName').value = currentStudent.name || '';
-    document.getElementById('caPhone').value = currentStudent.mobile || '';
-    document.getElementById('caEmail').value = currentStudent.email || '';
-    
-    const collegeInput = document.getElementById('caCollege');
-    if (currentStudent.college && currentStudent.college !== 'Not Specified') {
-        collegeInput.value = currentStudent.college;
-    } else {
-        collegeInput.value = ''; 
-    }
+  document.getElementById('caName').value = currentStudent.name || '';
+  document.getElementById('caPhone').value = currentStudent.mobile || '';
+  document.getElementById('caEmail').value = currentStudent.email || '';
 
-    modal.classList.remove('hidden');
+  const collegeInput = document.getElementById('caCollege');
+  if (currentStudent.college && currentStudent.college !== 'Not Specified') {
+    collegeInput.value = currentStudent.college;
+  } else {
+    collegeInput.value = '';
+  }
+
+  modal.classList.remove('hidden');
 }
 
-window.closeCAModal = function() {
-    document.getElementById('caModal').classList.add('hidden');
+window.closeCAModal = function () {
+  document.getElementById('caModal').classList.add('hidden');
 }
 
 const caForm = document.getElementById('caApplicationForm');
 if (caForm) {
-    caForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById('submitCaBtn');
-        btn.disabled = true;
-        btn.textContent = 'Uploading...';
+  caForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submitCaBtn');
+    btn.disabled = true;
+    btn.textContent = 'Uploading...';
 
-        try {
-            const college = document.getElementById('caCollege').value.trim();
-            const year = document.getElementById('caYear').value;
-            const reasonCa = document.getElementById('caReason').value;
-            const reasonHire = document.getElementById('caWhyHire').value;
-            const resumeFile = document.getElementById('caResume').files[0];
+    try {
+      const college = document.getElementById('caCollege').value.trim();
+      const year = document.getElementById('caYear').value;
+      const reasonCa = document.getElementById('caReason').value;
+      const reasonHire = document.getElementById('caWhyHire').value;
+      const resumeFile = document.getElementById('caResume').files[0];
 
-            if(!college) throw new Error("College Name is required");
-            if(!resumeFile) throw new Error("Resume is required");
+      if (!college) throw new Error("College Name is required");
+      if (!resumeFile) throw new Error("Resume is required");
 
-            const fileExt = resumeFile.name.split('.').pop();
-            const fileName = `ca_${currentStudent.id}_${Date.now()}.${fileExt}`;
-            
-            const { error: uploadError } = await supabase.storage
-                .from('ca_resumes')
-                .upload(fileName, resumeFile);
+      const fileExt = resumeFile.name.split('.').pop();
+      const fileName = `ca_${currentStudent.id}_${Date.now()}.${fileExt}`;
 
-            if (uploadError) throw new Error("Resume upload failed: " + uploadError.message);
+      const { error: uploadError } = await supabase.storage
+        .from('ca_resumes')
+        .upload(fileName, resumeFile);
 
-            const { data: { publicUrl } } = supabase.storage
-                .from('ca_resumes')
-                .getPublicUrl(fileName);
+      if (uploadError) throw new Error("Resume upload failed: " + uploadError.message);
 
-            const { error: appError } = await supabase.from('ca_hire').insert({
-                student_id: currentStudent.id,
-                name: currentStudent.name,
-                phone: currentStudent.mobile,
-                email: currentStudent.email,
-                college: college,
-                year: year,
-                reason_ca: reasonCa,
-                reason_hire: reasonHire,
-                resume_url: publicUrl
-            });
+      const { data: { publicUrl } } = supabase.storage
+        .from('ca_resumes')
+        .getPublicUrl(fileName);
 
-            if (appError) throw new Error("Application save failed: " + appError.message);
+      const { error: appError } = await supabase.from('ca_hire').insert({
+        student_id: currentStudent.id,
+        name: currentStudent.name,
+        phone: currentStudent.mobile,
+        email: currentStudent.email,
+        college: college,
+        year: year,
+        reason_ca: reasonCa,
+        reason_hire: reasonHire,
+        resume_url: publicUrl
+      });
 
-            const { error: caError } = await supabase.from('campus_ambassadors').insert({
-                student_id: currentStudent.id,
-                status: 'pending'
-            });
+      if (appError) throw new Error("Application save failed: " + appError.message);
 
-            if (caError) throw new Error("System error: " + caError.message);
+      const { error: caError } = await supabase.from('campus_ambassadors').insert({
+        student_id: currentStudent.id,
+        status: 'pending'
+      });
 
-            alert("Application submitted successfully! HR will review your profile.");
-            closeCAModal();
-            checkCaStatus(); 
+      if (caError) throw new Error("System error: " + caError.message);
 
-        } catch (error) {
-            console.error(error);
-            alert(error.message);
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Submit Application';
-        }
-    });
+      alert("Application submitted successfully! HR will review your profile.");
+      closeCAModal();
+      checkCaStatus();
+
+    } catch (error) {
+      console.error(error);
+      alert(error.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Submit Application';
+    }
+  });
 }
+
+// --- NEW: MEAL REQUEST HANDLER ---
+const mealRequestForm = document.getElementById('mealRequestForm');
+if (mealRequestForm) {
+  mealRequestForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const date = document.getElementById('requestDate').value;
+    const mealType = document.getElementById('requestMealType').value;
+    const submitBtn = document.getElementById('submitMealReqBtn');
+
+    if (!currentStudent || !currentStudent.tenant_id) return;
+
+    // Validation: Date cannot be in the past
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (selectedDate < today) {
+      alert("Cannot request meals for past dates.");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+
+    try {
+      const { error } = await supabase
+        .from('meal_requests')
+        .insert({
+          student_id: currentStudent.id,
+          tenant_id: currentStudent.tenant_id,
+          date: date,
+          meal_type: mealType,
+          status: 'Requested'
+        });
+
+      if (error) throw error;
+
+      alert("Meal request submitted successfully!");
+      mealRequestForm.reset();
+      loadMealRequests();
+    } catch (err) {
+      console.error("Error submitting meal request:", err);
+      alert("Failed to submit request: " + err.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit Manual Request';
+    }
+  });
+}
+
+
 
 async function checkCaStatus() {
-    if (!currentStudent) return; 
+  if (!currentStudent) return;
 
-    const container = document.getElementById('caActionContainer');
-    const text = document.getElementById('caStatusText');
-    
-    if(!container || !text) return;
+  const container = document.getElementById('caActionContainer');
+  const text = document.getElementById('caStatusText');
 
-    const { data: ca } = await supabase.from('campus_ambassadors')
-        .select('status')
-        .eq('student_id', currentStudent.id)
-        .maybeSingle();
+  if (!container || !text) return;
 
-    if (!ca) {
-        const btn = document.getElementById('applyCaBtn');
-        if(btn) btn.onclick = window.applyForCA; 
-    } else if (ca.status === 'pending') {
-        container.innerHTML = `<span class="text-yellow-600 font-bold bg-yellow-100 px-4 py-2 rounded-lg">Application Pending</span>`;
-        text.textContent = "Your application is under review.";
-    } else if (ca.status === 'approved') {
-        container.innerHTML = `<a href="campusambassador.html" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 shadow-lg font-bold flex items-center">Go to CA Dashboard →</a>`;
-        text.textContent = "You are an active Campus Ambassador!";
-    } else if (ca.status === 'rejected') {
-        container.innerHTML = `<span class="text-red-600 font-bold">Application Rejected</span>`;
-    }
+  const { data: ca } = await supabase.from('campus_ambassadors')
+    .select('status')
+    .eq('student_id', currentStudent.id)
+    .maybeSingle();
+
+  if (!ca) {
+    const btn = document.getElementById('applyCaBtn');
+    if (btn) btn.onclick = window.applyForCA;
+  } else if (ca.status === 'pending') {
+    container.innerHTML = `<span class="text-yellow-600 font-bold bg-yellow-100 px-4 py-2 rounded-lg">Application Pending</span>`;
+    text.textContent = "Your application is under review.";
+  } else if (ca.status === 'approved') {
+    container.innerHTML = `<a href="campusambassador.html" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 shadow-lg font-bold flex items-center">Go to CA Dashboard →</a>`;
+    text.textContent = "You are an active Campus Ambassador!";
+  } else if (ca.status === 'rejected') {
+    container.innerHTML = `<span class="text-red-600 font-bold">Application Rejected</span>`;
+  }
 }
+
+// --- CENTRAL INITIALIZATION ---
+async function initDashboard() {
+  console.log("Initializing Dashboard...");
+  currentStudent = await checkAuth();
+  if (!currentStudent) return;
+
+  console.log("Welcome,", currentStudent.name);
+
+  // Setup UI components
+  updateDashboardState();
+  loadStudentInfo();
+
+  // Load data if mess is enrolled
+  if (currentStudent.mess_id) {
+    loadAttendanceStats();
+    loadPaymentInfo();
+    applyPlanFeatures();
+    loadMealRequests();
+  }
+
+  checkCaStatus();
+
+  // Global Logout
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      window.location.href = 'login.html';
+    });
+  }
+
+  // Tab Switching for Meal Requests
+  const tabAuto = document.getElementById('tabAuto');
+  const tabManual = document.getElementById('tabManual');
+  const autoDiv = document.getElementById('autoRequestDiv');
+  const manualForm = document.getElementById('mealRequestForm');
+
+  if (tabAuto && tabManual) {
+    tabAuto.addEventListener('click', () => {
+      tabAuto.className = 'py-2 px-6 font-bold text-green-600 border-b-2 border-green-600 transition';
+      tabManual.className = 'py-2 px-6 font-semibold text-gray-500 hover:text-green-600 transition';
+      autoDiv.classList.remove('hidden');
+      manualForm.classList.add('hidden');
+      updateAutoMealStatus();
+    });
+
+    tabManual.addEventListener('click', () => {
+      tabManual.className = 'py-2 px-6 font-bold text-green-600 border-b-2 border-green-600 transition';
+      tabAuto.className = 'py-2 px-6 font-semibold text-gray-500 hover:text-green-600 transition';
+      manualForm.classList.remove('hidden');
+      autoDiv.classList.add('hidden');
+    });
+  }
+
+  const autoReqBtn = document.getElementById('autoMealReqBtn');
+  if (autoReqBtn) {
+    autoReqBtn.addEventListener('click', handleAutoMealRequest);
+  }
+}
+
+// Start the dashboard
+document.addEventListener('DOMContentLoaded', initDashboard);
