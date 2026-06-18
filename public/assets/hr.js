@@ -36,7 +36,8 @@ window.switchTab = (tab) => {
         'withdrawals': 'Withdrawal Requests',
         'interns': 'Intern Applications',
         'tenants': 'Tenant Config',
-        'planMgmt': 'Plan Management'
+        'planMgmt': 'Plan Management',
+        'manageInternships': 'Manage Internships'
     };
     const titleEl = document.getElementById('pageTitle');
     if(titleEl) titleEl.textContent = titles[tab] || 'Dashboard';
@@ -48,6 +49,7 @@ window.switchTab = (tab) => {
     if(tab === 'interns') loadInterns();
     if(tab === 'tenants') loadTenants();
     if(tab === 'planMgmt') loadPlanManagement();
+    if(tab === 'manageInternships') loadInternships();
 };
 
 // ============================================================
@@ -799,6 +801,127 @@ window.saveNewPlan = async () => {
     closeNewPlanModal();
     alert(`Plan "${name}" saved successfully!`);
     loadPlanManagement();
+};
+
+// ============================================================
+// 8. INTERNSHIP ROLES MANAGEMENT (CRUD)
+// ============================================================
+window.loadInternships = async () => {
+    const list = document.getElementById('internshipsList');
+    if (!list) return;
+    list.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-400">Loading internships...</td></tr>';
+
+    const { data: internships, error } = await supabase
+        .from('internships')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        list.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-red-500">Error: ${error.message}</td></tr>`;
+        return;
+    }
+
+    list.innerHTML = '';
+    if (!internships || internships.length === 0) {
+        list.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-400">No internship roles defined.</td></tr>';
+        return;
+    }
+
+    internships.forEach(item => {
+        const statusBadge = item.is_active 
+            ? '<span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-bold">Active</span>'
+            : '<span class="bg-gray-100 text-gray-500 text-xs px-2 py-0.5 rounded-full font-bold">Closed</span>';
+
+        const techBadges = (item.tech_stack || []).map(t => `<span class="bg-blue-50 text-blue-600 text-[10px] px-1.5 py-0.5 rounded border border-blue-100 mr-1 mb-1 inline-block">${t}</span>`).join('');
+
+        list.innerHTML += `
+            <tr class="hover:bg-gray-50 group">
+                <td class="p-4">
+                    <p class="font-bold text-gray-800">${item.title}</p>
+                    <p class="text-xs text-gray-400 font-mono">${item.id.substring(0,8)}...</p>
+                </td>
+                <td class="p-4">
+                    <p class="text-sm text-gray-600 line-clamp-1 mb-1">${item.description}</p>
+                    <div class="flex flex-wrap">${techBadges}</div>
+                </td>
+                <td class="p-4 text-center">${statusBadge}</td>
+                <td class="p-4 text-center">
+                    <div class="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onclick="editInternship('${item.id}')" class="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-2 rounded">Edit</button>
+                        <button onclick="deleteInternship('${item.id}')" class="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 p-2 rounded">Delete</button>
+                    </div>
+                </td>
+            </tr>`;
+    });
+};
+
+window.openInternshipModal = () => {
+    document.getElementById('internshipId').value = '';
+    document.getElementById('internshipForm').reset();
+    document.getElementById('internshipModalTitle').textContent = 'Create Internship Role';
+    document.getElementById('internshipModal').classList.remove('hidden');
+};
+
+window.closeInternshipModal = () => {
+    document.getElementById('internshipModal').classList.add('hidden');
+};
+
+window.editInternship = async (id) => {
+    const { data, error } = await supabase.from('internships').select('*').eq('id', id).single();
+    if (error) return alert(error.message);
+
+    document.getElementById('internshipId').value = data.id;
+    document.getElementById('internTitle').value = data.title;
+    document.getElementById('internDesc').value = data.description;
+    document.getElementById('internResponsibilities').value = (data.responsibilities || []).join('\n');
+    document.getElementById('internTechStack').value = (data.tech_stack || []).join('\n');
+    document.getElementById('internIconType').value = data.icon_type;
+    document.getElementById('internIconColor').value = data.icon_color;
+    document.getElementById('internBgColor').value = data.bg_color;
+    document.getElementById('internIsActive').checked = data.is_active;
+
+    document.getElementById('internshipModalTitle').textContent = 'Edit Internship Role';
+    document.getElementById('internshipModal').classList.remove('hidden');
+};
+
+window.saveInternship = async () => {
+    const id = document.getElementById('internshipId').value;
+    const title = document.getElementById('internTitle').value.trim();
+    const description = document.getElementById('internDesc').value.trim();
+    const responsibilities = document.getElementById('internResponsibilities').value.trim().split('\n').filter(r => r.trim());
+    const tech_stack = document.getElementById('internTechStack').value.trim().split('\n').filter(t => t.trim());
+    const icon_type = document.getElementById('internIconType').value;
+    const icon_color = document.getElementById('internIconColor').value.trim();
+    const bg_color = document.getElementById('internBgColor').value.trim();
+    const is_active = document.getElementById('internIsActive').checked;
+
+    if (!title || !description) return alert('Title and Description are required.');
+
+    const payload = { title, description, responsibilities, tech_stack, icon_type, icon_color, bg_color, is_active };
+
+    let error;
+    if (id) {
+        const { error: err } = await supabase.from('internships').update(payload).eq('id', id);
+        error = err;
+    } else {
+        const { error: err } = await supabase.from('internships').insert(payload);
+        error = err;
+    }
+
+    if (error) {
+        alert('Error saving: ' + error.message);
+    } else {
+        closeInternshipModal();
+        loadInternships();
+        alert('Internship role saved successfully!');
+    }
+};
+
+window.deleteInternship = async (id) => {
+    if (!confirm('Are you sure you want to delete this role?')) return;
+    const { error } = await supabase.from('internships').delete().eq('id', id);
+    if (error) alert(error.message);
+    else loadInternships();
 };
 
 // ── Logout ──────────────────────────────────────────────────────────
